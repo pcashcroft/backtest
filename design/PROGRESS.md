@@ -25,6 +25,7 @@ This file answers:
     - RTH partitions: 257 (missing weekday dates are holidays: 2025-12-25 and 2026-01-01)
 
 ## Next (in the next thread)
+- Update context_pack generator to include SSD data layout + shallow SSD folder trees (so new threads know what exists on disk).
 - Download more ES trade-level data (user will provide details).
 - Re-run ES canonical ingest incrementally for expanded data.
 - Then build derived intraday tables for FULL and RTH:

@@ -30,6 +30,7 @@ from pathlib import Path
 import datetime as dt
 import subprocess
 import sys
+import json
 
 
 def _repo_root() -> Path:
@@ -123,6 +124,65 @@ def _git_changed_files_last_commits(n: int = 5) -> list[Path]:
     return uniq
 
 
+def _load_snapshot_safe(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+
+
+def _is_truthy(val: object) -> bool:
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, (int, float)):
+        return val != 0
+    if isinstance(val, str):
+        return val.strip().lower() in {"1", "true", "yes", "y"}
+    return False
+
+
+def _select_active_paths_row(snapshot: dict) -> dict:
+    sheets = snapshot.get("sheets", {})
+    rows = sheets.get("PATHS", [])
+    for row in rows:
+        if _is_truthy(row.get("IsActive")):
+            return row
+    return {}
+
+
+def _safe_tree(root: Path, max_depth: int = 2, max_entries: int = 200) -> list[str]:
+    lines: list[str] = []
+    try:
+        if not root.exists():
+            return [f"(missing) {root}"]
+    except Exception as exc:
+        return [f"(cannot access) {root} ({exc})"]
+
+    def walk(path: Path, depth: int) -> None:
+        if len(lines) >= max_entries:
+            return
+        if depth > max_depth:
+            return
+        try:
+            entries = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+        except Exception as exc:
+            lines.append(f"{'  ' * (depth - 1)}(cannot list) {path} ({exc})")
+            return
+        for entry in entries:
+            if len(lines) >= max_entries:
+                return
+            rel = entry
+            indent = "  " * (depth - 1)
+            lines.append(f"{indent}{rel}")
+            if entry.is_dir():
+                walk(entry, depth + 1)
+
+    walk(root, 1)
+    if len(lines) >= max_entries:
+        lines.append("(truncated)")
+    return lines
+
+
 def main() -> int:
     repo_root = _repo_root()
     ts = dt.datetime.now().isoformat(timespec="seconds")
@@ -200,6 +260,35 @@ def main() -> int:
     else:
         parts.append("(no config snapshot found)")
     parts.append("")
+
+    # SSD Data Layout
+    snapshot = _load_snapshot_safe(latest_snapshot) if latest_snapshot.exists() else {}
+    paths_row = _select_active_paths_row(snapshot)
+    data_root = paths_row.get("DATA_ROOT", "E:/BacktestData") if paths_row else "E:/BacktestData"
+    raw_dir = paths_row.get("RAW_DIR", "E:/BacktestData/raw") if paths_row else "E:/BacktestData/raw"
+    canonical_dir = paths_row.get("CANONICAL_DIR", "E:/BacktestData/canonical") if paths_row else "E:/BacktestData/canonical"
+    duckdb_file = paths_row.get("DUCKDB_FILE", "E:/BacktestData/duckdb/research.duckdb") if paths_row else "E:/BacktestData/duckdb/research.duckdb"
+
+    parts.append("## SSD Data Layout (from snapshot + filesystem)")
+    parts.append("### SSD Paths (active PATHS row)")
+    parts.append("```text")
+    parts.append(f"DATA_ROOT: {data_root}")
+    parts.append(f"RAW_DIR: {raw_dir}")
+    parts.append(f"CANONICAL_DIR: {canonical_dir}")
+    parts.append(f"DUCKDB_FILE: {duckdb_file}")
+    parts.append("```")
+    parts.append("")
+
+    for label, root in [("DATA_ROOT", data_root), ("RAW_DIR", raw_dir), ("CANONICAL_DIR", canonical_dir)]:
+        parts.append(f"### {label} tree (depth=2)")
+        parts.append("```text")
+        try:
+            lines = _safe_tree(Path(root), max_depth=2, max_entries=200)
+        except Exception as exc:
+            lines = [f"(cannot list) {root} ({exc})"]
+        parts.extend(lines)
+        parts.append("```")
+        parts.append("")
 
     parts.append("## Code Focus (changed files in last 5 commits)")
     changed = _git_changed_files_last_commits(5)

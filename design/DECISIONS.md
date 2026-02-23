@@ -66,3 +66,26 @@ These are local/generated only.
   09:30–16:00 America/New_York, weekdays only.
   US holidays may have no RTH trades (expected).
 <CONTENT_END>
+
+### 2026-02-23 - Context pack must include SSD data layout (so new threads know what exists on disk)
+- context_pack.md must include an "SSD Data Layout" section that shows:
+  - Active PATHS values from config_snapshot_latest.json:
+    DATA_ROOT, RAW_DIR, CANONICAL_DIR, DUCKDB_FILE (at minimum).
+  - A shallow folder listing (depth ~2) for:
+    DATA_ROOT, RAW_DIR, CANONICAL_DIR.
+- Robustness requirement:
+  - The context pack generator must not crash if E:\ is missing, a folder does not exist,
+    or permissions block listing.
+  - It should print a clear "missing / cannot list" message instead.
+
+### 2026-02-23 - Design docs must be complete (no omitted content)
+- In design/SPEC.md, design/WORKFLOW.md, design/ROADMAP.md, design/DECISIONS.md, design/PROGRESS.md:
+  - Do not use "..." or any placeholder that implies omitted content.
+  - These files are authoritative memory and must be complete and self-contained.
+  - If something is intentionally deferred, write "TBD" with a short note (do not remove existing content).
+- Prefer surgical edits to SPEC:
+  - Do not rewrite the whole SPEC unless absolutely necessary.
+  - Prefer small inserts/appends and verify with git diff before commit.
+- Archives are for rollback/audit only:
+  - The live design/*.md files are the authoritative source of truth.
+  - Do not rely on archive/ for "current requirements" except to recover from mistakes.

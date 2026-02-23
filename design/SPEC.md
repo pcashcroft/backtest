@@ -411,6 +411,13 @@ latest exported JSON config from config/exports/
 
 if none exists, list workbook sheet names + headers (not the whole binary)
 
+SSD data layout (REQUIRED):
+- Print the active PATHS values from the snapshot (at minimum):
+  DATA_ROOT, RAW_DIR, CANONICAL_DIR, DUCKDB_FILE.
+- Print shallow filesystem trees (depth ~2) for:
+  DATA_ROOT, RAW_DIR, CANONICAL_DIR.
+- Must not crash if the SSD path is missing or cannot be listed; print a clear message instead.
+
 Code focus:
 
 list changed files in last 5 commits
