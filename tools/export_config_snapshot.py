@@ -1,3 +1,17 @@
+"""
+INSTRUCTION HEADER
+Purpose: Export the Excel control plane to JSON snapshots.
+Inputs: Reads `config/run_config.xlsx`.
+Outputs: Writes `config/exports/config_snapshot_<YYYYMMDD_HHMMSS>.json`
+and `config/exports/config_snapshot_latest.json`.
+How to run: `pybt tools/export_config_snapshot.py`
+Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\export_config_snapshot.py`
+Success looks like: printed paths for the timestamped snapshot and latest snapshot.
+Common failures and fixes:
+- Module not found (openpyxl or orjson): run `pybt -m pip install openpyxl orjson`.
+- Missing workbook: run `pybt tools/make_run_config_xlsx.py`.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,10 +20,12 @@ import sys
 
 
 def _repo_root() -> Path:
+    """Return the repository root folder based on this file location."""
     return Path(__file__).resolve().parents[1]
 
 
 def main() -> int:
+    """Export snapshots using the schema-aware exporter."""
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root / "src"))
     from backtest.config.export_snapshot import export_snapshot

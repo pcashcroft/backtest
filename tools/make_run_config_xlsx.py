@@ -1,3 +1,16 @@
+"""
+INSTRUCTION HEADER
+Purpose: Create the Excel control-plane workbook with required sheets and headers.
+Inputs: Reads schema from `src/backtest/config/schema.py`.
+Outputs: Writes `config/run_config.xlsx`.
+How to run: `pybt tools/make_run_config_xlsx.py`
+Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\make_run_config_xlsx.py`
+Success looks like: console prints `Created workbook: ...config\\run_config.xlsx`.
+Common failures and fixes:
+- Module not found (openpyxl): run `pybt -m pip install openpyxl`.
+- Wrong working folder: run from the repo root.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,10 +21,12 @@ from openpyxl.utils import get_column_letter
 
 
 def _repo_root() -> Path:
+    """Return the repository root folder based on this file location."""
     return Path(__file__).resolve().parents[1]
 
 
 def _load_headers() -> dict[str, list[str]]:
+    """Load the Excel header schema from `src/backtest/config/schema.py`."""
     import sys
 
     repo_root = _repo_root()
@@ -22,6 +37,7 @@ def _load_headers() -> dict[str, list[str]]:
 
 
 def main() -> int:
+    """Generate the workbook and write it to `config/run_config.xlsx`."""
     headers = _load_headers()
     repo_root = _repo_root()
     output_path = repo_root / "config" / "run_config.xlsx"

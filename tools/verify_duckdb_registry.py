@@ -1,3 +1,16 @@
+"""
+INSTRUCTION HEADER
+Purpose: Verify the DuckDB registry exists and contains required tables.
+Inputs: Reads `E:\\BacktestData\\duckdb\\research.duckdb`.
+Outputs: None (prints results, exits non-zero on failure).
+How to run: `pybt tools/verify_duckdb_registry.py`
+Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\verify_duckdb_registry.py`
+Success looks like: `DuckDB registry verification passed.`
+Common failures and fixes:
+- Module not found (duckdb): run `pybt -m pip install duckdb`.
+- Database missing: run `pybt tools/bootstrap_foundation.py`.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,6 +20,7 @@ import duckdb
 
 
 def main() -> int:
+    """Validate that required registry tables exist."""
     db_path = Path("E:/BacktestData/duckdb/research.duckdb")
     if not db_path.exists():
         print(f"Missing DuckDB file: {db_path}")

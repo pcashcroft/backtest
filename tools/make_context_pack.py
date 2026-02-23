@@ -1,3 +1,16 @@
+"""
+INSTRUCTION HEADER
+Purpose: Generate a full project context pack for ChatGPT/Codex.
+Inputs: Reads repo files, key docs, and config snapshots if present.
+Outputs: Writes `context_pack.md` and prints it to the terminal.
+How to run: `pybt tools/make_context_pack.py`
+Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\make_context_pack.py`
+Success looks like: the full context prints to the terminal and `context_pack.md` exists.
+Common failures and fixes:
+- Git not installed: script still runs, but git metadata may show as `(no git)`.
+- Unicode/binary files: remove binary files from repo root and retry.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,10 +20,12 @@ import sys
 
 
 def _repo_root() -> Path:
+    """Return the repository root folder based on this file location."""
     return Path(__file__).resolve().parents[1]
 
 
 def _run_git(args: list[str]) -> str:
+    """Run a git command and return its output, or empty string on failure."""
     try:
         out = subprocess.check_output(["git", *args], stderr=subprocess.STDOUT)
         return out.decode("utf-8", errors="replace").strip()
@@ -19,6 +34,7 @@ def _run_git(args: list[str]) -> str:
 
 
 def _folder_tree(root: Path, max_depth: int = 3) -> list[str]:
+    """Return a folder tree up to the requested depth."""
     excluded = {
         ".git",
         "__pycache__",
@@ -50,11 +66,13 @@ def _folder_tree(root: Path, max_depth: int = 3) -> list[str]:
 
 
 def _read_text(path: Path) -> str:
+    """Read a UTF-8 text file from disk (replace errors)."""
     # Be resilient to non-UTF8 text files; never crash the context pack.
     return path.read_text(encoding="utf-8", errors="replace")
 
 
 def _git_changed_files_last_commits(n: int = 5) -> list[Path]:
+    """Return unique files changed in the last N commits."""
     out = _run_git(["log", f"-n{n}", "--name-only", "--pretty=format:"])
     if not out:
         return []
@@ -74,6 +92,7 @@ def _git_changed_files_last_commits(n: int = 5) -> list[Path]:
 
 
 def _is_binary_extension(path: Path) -> bool:
+    """Return True if a file is likely binary and should be skipped."""
     # Keep this conservative: if it's likely binary, don't attempt read_text().
     return path.suffix.lower() in {
         ".xlsx",
@@ -99,6 +118,7 @@ def _is_binary_extension(path: Path) -> bool:
 
 
 def _summarize_xlsx_headers(path: Path) -> str:
+    """Return a summary of sheet headers for an XLSX file."""
     try:
         import openpyxl  # type: ignore
     except Exception as e:
@@ -126,6 +146,7 @@ def _summarize_xlsx_headers(path: Path) -> str:
 
 
 def _include_file(path: Path) -> str:
+    """Return full file text or a trimmed version if it is large."""
     if not path.exists() or not path.is_file():
         return f"(missing) {path.as_posix()}"
 
@@ -145,6 +166,7 @@ def _include_file(path: Path) -> str:
 
 
 def main() -> int:
+    """Generate `context_pack.md` and print it to the terminal."""
     repo_root = _repo_root()
     ts = dt.datetime.now().isoformat(timespec="seconds")
     branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"]) or "(no git)"
