@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import datetime as dt
-import sys
+import json
+
+from openpyxl import load_workbook
 
 
 def _repo_root() -> Path:
@@ -25,11 +27,8 @@ def _repo_root() -> Path:
 
 
 def main() -> int:
-    """Export snapshots using the schema-aware exporter."""
+    """Export snapshots using the schema from the workbook itself."""
     repo_root = _repo_root()
-    sys.path.insert(0, str(repo_root / "src"))
-    from backtest.config.export_snapshot import export_snapshot
-
     xlsx_path = repo_root / "config" / "run_config.xlsx"
     exports_dir = repo_root / "config" / "exports"
     exports_dir.mkdir(parents=True, exist_ok=True)
@@ -38,8 +37,46 @@ def main() -> int:
     latest_path = exports_dir / "config_snapshot_latest.json"
     stamped_path = exports_dir / f"config_snapshot_{ts}.json"
 
-    export_snapshot(xlsx_path, stamped_path)
-    export_snapshot(xlsx_path, latest_path)
+    wb = load_workbook(xlsx_path)
+
+    schema: dict[str, list[str]] = {}
+    sheets: dict[str, list[dict[str, object]]] = {}
+
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+        header_row = [c.value for c in ws[1]]
+        header = [h for h in header_row if h is not None and str(h).strip() != ""]
+        if not header:
+            raise ValueError(f"Missing header row in sheet: {sheet_name}")
+
+        def _is_blank_row(values: list[object]) -> bool:
+            for v in values:
+                if v is None:
+                    continue
+                if isinstance(v, str) and v.strip() == "":
+                    continue
+                return False
+            return True
+
+        rows: list[dict[str, object]] = []
+        for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True):
+            if _is_blank_row(list(row)):
+                continue
+            record = {header[i]: row[i] if i < len(row) else None for i in range(len(header))}
+            rows.append(record)
+
+        schema[sheet_name] = header
+        sheets[sheet_name] = rows
+
+    payload = {
+        "exported_at": dt.datetime.now().isoformat(timespec="seconds"),
+        "source_xlsx": str(xlsx_path),
+        "schema": schema,
+        "sheets": sheets,
+    }
+
+    stamped_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    latest_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     print(f"Wrote snapshot: {stamped_path}")
     print(f"Wrote latest : {latest_path}")

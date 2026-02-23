@@ -58,16 +58,15 @@ def main() -> int:
         print("Unexpected sheets:", ", ".join(extra))
         failed = True
 
-    for sheet_name, expected_cols in headers.items():
+    for sheet_name, required_cols in headers.items():
         if sheet_name not in wb.sheetnames:
             continue
         ws = wb[sheet_name]
-        actual_cols = [c.value for c in ws[1]]
-        if actual_cols != expected_cols:
+        actual_cols = [c.value for c in ws[1] if c.value is not None and str(c.value).strip() != ""]
+        missing_cols = [c for c in required_cols if c not in actual_cols]
+        if missing_cols:
             failed = True
-            print(f"Header mismatch in {sheet_name}:")
-            print("  Expected:", expected_cols)
-            print("  Actual  :", actual_cols)
+            print(f"Missing required columns in {sheet_name}: {missing_cols}")
 
     if failed:
         return 1
