@@ -1,30 +1,35 @@
-# Doc Update Protocol (Plain English)
+﻿# DOC UPDATE PROTOCOL
 
-Use these steps every time you change docs.
+Goal:
+- Keep the repo as the “memory” of the project.
+- Make starting a new chat thread painless and consistent.
 
-## 1) Archive the current docs
-Command:
-```powershell
-$ts = Get-Date -Format yyyyMMdd_HHmmss
-New-Item -ItemType Directory -Force -Path "archive/$ts" | Out-Null
-```
-Copy any doc you are about to change:
-```powershell
-Copy-Item -Force instructions/00_setup.md "archive/$ts/instructions/00_setup.md"
-Copy-Item -Force instructions/01_daily_workflow.md "archive/$ts/instructions/01_daily_workflow.md"
-Copy-Item -Force design/SPEC.md "archive/$ts/design/SPEC.md"
-Copy-Item -Force design/WORKFLOW.md "archive/$ts/design/WORKFLOW.md"
-Copy-Item -Force design/ROADMAP.md "archive/$ts/design/ROADMAP.md"
-Copy-Item -Force design/DOC_UPDATE_PROTOCOL.md "archive/$ts/design/DOC_UPDATE_PROTOCOL.md"
-```
+## Non-negotiable rule
+- ChatGPT writes all design text (SPEC/WORKFLOW/ROADMAP/DECISIONS/PROGRESS).
+- Codex only copies that text into files and writes/edits code.
 
-## 2) Overwrite the docs
-Edit the original files in place. Do not change the archive copies.
+## When to run this protocol
+Run this protocol whenever:
+- a thread is ending, OR
+- we agreed a change that matters later.
 
-## 3) Optional commit and push
-Commands:
-```powershell
-git add instructions/00_setup.md instructions/01_daily_workflow.md design/SPEC.md design/WORKFLOW.md design/ROADMAP.md design/DOC_UPDATE_PROTOCOL.md archive/$ts
-git commit -m "Update docs"
-git push
-```
+## The process (repeat every time)
+1) ChatGPT produces updated full file contents in chat.
+2) User pastes one Codex prompt that:
+   - archives existing docs into archive/<timestamp>/...
+   - overwrites docs exactly with ChatGPT’s text
+3) User runs tools/end_thread_handover.ps1 once.
+4) The script:
+   - checks instruction headers
+   - commits and pushes
+   - regenerates context_pack.md and copies it to clipboard
+5) User pastes context_pack.md into the next chat thread.
+
+## What counts as “must be written down”
+Anything that is agreed and might be needed later, for example:
+- changes to chart requirements
+- changes to execution assumptions
+- new datasets/instruments
+- changes to workflow order
+This goes into design/DECISIONS.md and design/PROGRESS.md (and SPEC if it is a real requirement change).
+<CONTENT_END>

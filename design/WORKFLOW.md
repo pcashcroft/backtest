@@ -1,23 +1,31 @@
-# WORKFLOW
+﻿# WORKFLOW
 
-## Plain English Summary
-Build the system in a strict order. Start with storage and config, then ingestion, then derived data and charts, then backtests, then features, then optimization.
+Purpose:
+- This file explains the *order of work* and how the pieces connect.
+- It should not repeat the full spec. The spec is in design/SPEC.md.
 
-## Build/Run Order
-1. Ingest/store foundation.
-2. Derived tables + chart data API + thin notebooks.
-3. PnL/execution engine.
-4. Feature system + caching.
-5. Optimization + constraints + robustness.
+## Folder roles (to prevent “all over the place”)
+- design/ = what we are building + rules + decisions + progress
+- instructions/ = only “how to run commands”
+- tools/ = runnable scripts (orchestrators)
+- src/ = reusable code modules (business logic)
+- notebooks/ = thin visualizations only (no core logic)
 
-## Commands We Will Implement
-- `pybt tools/bootstrap_foundation.py`
-- `pybt tools/make_run_config_xlsx.py`
-- `pybt tools/verify_run_config_xlsx.py`
-- `pybt tools/export_config_snapshot.py`
-- `pybt tools/verify_duckdb_registry.py`
-- `pybt tools/ingest_<source>.py` (placeholder)
-- `pybt tools/build_derived.py` (placeholder)
-- `pybt tools/run_backtests.py` (placeholder)
-- `pybt tools/run_optimization.py` (placeholder)
-- `pybt tools/make_context_pack.py`
+## Required build order (must follow)
+1) Ingest + storage foundation (raw/canonical/registry)
+2) Derived tables + flexible charts (validate data quality)
+3) PnL/execution engine (daily + intraday)
+4) Feature system + caching
+5) Optimization + constraints + robustness
+
+## Config rule (always)
+- Excel is edited by the user.
+- Python scripts read config/exports/config_snapshot_latest.json.
+
+## End-of-thread rule (always)
+When the user says “start a new thread”:
+1) ChatGPT writes updated design docs (SPEC/WORKFLOW/ROADMAP/DECISIONS/PROGRESS) in chat.
+2) User pastes ONE Codex prompt that archives + overwrites docs exactly.
+3) User runs tools/end_thread_handover.ps1 once.
+4) User pastes the generated context_pack.md into the new chat thread.
+<CONTENT_END>

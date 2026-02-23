@@ -1,17 +1,30 @@
 """
 INSTRUCTION HEADER
-Purpose: Generate a full project context pack for ChatGPT/Codex.
-Inputs: Reads repo files, key docs, and config snapshots if present.
-Outputs: Writes `context_pack.md` and prints it to the terminal.
-How to run: `pybt tools/make_context_pack.py`
-Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\make_context_pack.py`
-Success looks like: the full context prints to the terminal and `context_pack.md` exists.
-Common failures and fixes:
-- Git not installed: script still runs, but git metadata may show as `(no git)`.
-- Unicode/binary files: remove binary files from repo root and retry.
+
+What this script does (plain English):
+- Creates context_pack.md in the repo root.
+- context_pack.md is what you paste into a NEW chat thread so the new thread
+  has the full project memory (spec + decisions + progress + config snapshot + key code).
+
+Where to run:
+- Run from repo root: C:\\Users\\pcash\\OneDrive\\Backtest
+
+How to run:
+- pybt tools/make_context_pack.py
+  (or use your conda python path)
+
+What success looks like:
+- It prints the contents of context_pack.md to the terminal.
+- It also writes/overwrites context_pack.md in the repo root.
+
+Notes:
+- This script must never crash due to encoding/binary files.
+- It will not print binary file contents (xlsx, dbn, parquet, etc.). It will only note they exist.
 """
 
 from __future__ import annotations
+
+
 
 from pathlib import Path
 import datetime as dt
@@ -20,12 +33,10 @@ import sys
 
 
 def _repo_root() -> Path:
-    """Return the repository root folder based on this file location."""
     return Path(__file__).resolve().parents[1]
 
 
 def _run_git(args: list[str]) -> str:
-    """Run a git command and return its output, or empty string on failure."""
     try:
         out = subprocess.check_output(["git", *args], stderr=subprocess.STDOUT)
         return out.decode("utf-8", errors="replace").strip()
@@ -34,7 +45,6 @@ def _run_git(args: list[str]) -> str:
 
 
 def _folder_tree(root: Path, max_depth: int = 3) -> list[str]:
-    """Return a folder tree up to the requested depth."""
     excluded = {
         ".git",
         "__pycache__",
@@ -44,6 +54,8 @@ def _folder_tree(root: Path, max_depth: int = 3) -> list[str]:
         ".pytest_cache",
         ".mypy_cache",
         ".ruff_cache",
+        ".ruff_cache",
+        ".DS_Store",
     }
     lines: list[str] = []
     root = root.resolve()
@@ -66,24 +78,44 @@ def _folder_tree(root: Path, max_depth: int = 3) -> list[str]:
 
 
 def _read_text(path: Path) -> str:
-    """Read a UTF-8 text file from disk (replace errors)."""
-    # Be resilient to non-UTF8 text files; never crash the context pack.
     return path.read_text(encoding="utf-8", errors="replace")
 
 
+_BINARY_SUFFIXES = {
+    ".xlsx", ".xlsm", ".xls", ".dbn", ".zst", ".parquet", ".png", ".jpg", ".jpeg", ".gif",
+    ".pdf", ".zip", ".whl", ".exe", ".dll",
+}
+
+
+def _include_file(path: Path) -> str:
+    if not path.exists() or not path.is_file():
+        return f"(missing) {path.as_posix()}"
+
+    if path.suffix.lower() in _BINARY_SUFFIXES:
+        size = path.stat().st_size
+        return f"(binary file omitted) {path.name}  size={size} bytes"
+
+    text = _read_text(path)
+    lines = text.splitlines()
+    if len(lines) < 300:
+        return "\n".join(lines)
+    top = "\n".join(lines[:120])
+    bottom = "\n".join(lines[-60:])
+    return f"{top}\n...\n{bottom}"
+
+
 def _git_changed_files_last_commits(n: int = 5) -> list[Path]:
-    """Return unique files changed in the last N commits."""
     out = _run_git(["log", f"-n{n}", "--name-only", "--pretty=format:"])
     if not out:
         return []
-    files = []
+    files: list[str] = []
     for line in out.splitlines():
         line = line.strip()
-        if not line:
-            continue
-        files.append(line)
-    uniq = []
-    seen = set()
+        if line:
+            files.append(line)
+
+    uniq: list[Path] = []
+    seen: set[str] = set()
     for f in files:
         if f not in seen:
             seen.add(f)
@@ -91,87 +123,25 @@ def _git_changed_files_last_commits(n: int = 5) -> list[Path]:
     return uniq
 
 
-def _is_binary_extension(path: Path) -> bool:
-    """Return True if a file is likely binary and should be skipped."""
-    # Keep this conservative: if it's likely binary, don't attempt read_text().
-    return path.suffix.lower() in {
-        ".xlsx",
-        ".xls",
-        ".xlsm",
-        ".parquet",
-        ".duckdb",
-        ".db",
-        ".sqlite",
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".webp",
-        ".pdf",
-        ".zip",
-        ".7z",
-        ".tar",
-        ".gz",
-        ".bz2",
-        ".xz",
-    }
-
-
-def _summarize_xlsx_headers(path: Path) -> str:
-    """Return a summary of sheet headers for an XLSX file."""
-    try:
-        import openpyxl  # type: ignore
-    except Exception as e:
-        return f"(cannot summarize xlsx; openpyxl missing) {e!r}"
-
-    try:
-        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    except Exception as e:
-        return f"(cannot open xlsx) {e!r}"
-
-    lines: list[str] = []
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        # Header row is expected in row 1.
-        row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
-        headers = []
-        if row:
-            for v in row:
-                if v is None:
-                    headers.append("")
-                else:
-                    headers.append(str(v))
-        lines.append(f"- {sheet_name}: {', '.join(headers)}")
-    return "\n".join(lines)
-
-
-def _include_file(path: Path) -> str:
-    """Return full file text or a trimmed version if it is large."""
-    if not path.exists() or not path.is_file():
-        return f"(missing) {path.as_posix()}"
-
-    if _is_binary_extension(path):
-        if path.suffix.lower() in {".xlsx", ".xls", ".xlsm"}:
-            return _summarize_xlsx_headers(path)
-        return f"(binary file skipped) {path.as_posix()}"
-
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    if len(lines) < 300:
-        body = "\n".join(lines)
-    else:
-        top = "\n".join(lines[:120])
-        bottom = "\n".join(lines[-60:])
-        body = f"{top}\n...\n{bottom}"
-    return body
-
-
 def main() -> int:
-    """Generate `context_pack.md` and print it to the terminal."""
     repo_root = _repo_root()
     ts = dt.datetime.now().isoformat(timespec="seconds")
     branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"]) or "(no git)"
     head = _run_git(["rev-parse", "HEAD"]) or "(no git)"
     last5 = _run_git(["log", "-n5", "--oneline"]) or "(no git)"
+
+    # Key docs included every time (this is the memory for new threads)
+    key_docs = [
+        repo_root / "design" / "SPEC.md",
+        repo_root / "design" / "WORKFLOW.md",
+        repo_root / "design" / "ROADMAP.md",
+        repo_root / "design" / "DOC_UPDATE_PROTOCOL.md",
+        repo_root / "design" / "DECISIONS.md",
+        repo_root / "design" / "PROGRESS.md",
+        repo_root / "instructions" / "00_setup.md",
+        repo_root / "instructions" / "01_daily_workflow.md",
+        repo_root / "instructions" / "STYLE_GUIDE.md",
+    ]
 
     parts: list[str] = []
     parts.append("# Context Pack")
@@ -186,6 +156,26 @@ def main() -> int:
     parts.append("```")
     parts.append("")
 
+    # Handover Summary (so new thread sees the important stuff immediately)
+    decisions = repo_root / "design" / "DECISIONS.md"
+    progress = repo_root / "design" / "PROGRESS.md"
+    if decisions.exists() or progress.exists():
+        parts.append("## Handover Summary")
+        if progress.exists():
+            parts.append("### Progress (full file below in Key Docs)")
+            parts.append("```text")
+            parts.append(_include_file(progress))
+            parts.append("```")
+        if decisions.exists():
+            parts.append("### Recent decisions (full file below in Key Docs)")
+            parts.append("```text")
+            # show only the bottom ~60 lines so it’s not too repetitive
+            txt = _read_text(decisions).splitlines()
+            tail = "\n".join(txt[-60:]) if len(txt) > 60 else "\n".join(txt)
+            parts.append(tail)
+            parts.append("```")
+        parts.append("")
+
     parts.append("## Folder Tree (2-3 levels)")
     parts.append("```text")
     parts.extend(_folder_tree(repo_root, max_depth=3))
@@ -193,17 +183,10 @@ def main() -> int:
     parts.append("")
 
     parts.append("## Key Docs")
-    key_docs = [
-        repo_root / "design" / "SPEC.md",
-        repo_root / "design" / "WORKFLOW.md",
-        repo_root / "design" / "ROADMAP.md",
-        repo_root / "instructions" / "00_setup.md",
-        repo_root / "instructions" / "01_daily_workflow.md",
-    ]
     for doc in key_docs:
         parts.append(f"### {doc.relative_to(repo_root).as_posix()}")
         parts.append("```text")
-        parts.append(_read_text(doc))
+        parts.append(_include_file(doc))
         parts.append("```")
         parts.append("")
 
@@ -212,18 +195,13 @@ def main() -> int:
     if latest_snapshot.exists():
         parts.append("### config/exports/config_snapshot_latest.json")
         parts.append("```text")
-        parts.append(_read_text(latest_snapshot))
+        parts.append(_include_file(latest_snapshot))
         parts.append("```")
     else:
-        sys.path.insert(0, str(repo_root / "src"))
-        from backtest.config.schema import HEADERS
-
-        parts.append("### Workbook Schema")
-        for sheet, headers in HEADERS.items():
-            parts.append(f"- {sheet}: {', '.join(headers)}")
+        parts.append("(no config snapshot found)")
     parts.append("")
 
-    parts.append("## Code Focus")
+    parts.append("## Code Focus (changed files in last 5 commits)")
     changed = _git_changed_files_last_commits(5)
     if not changed:
         parts.append("(no git history or no changed files)")
@@ -237,8 +215,12 @@ def main() -> int:
     parts.append("")
 
     output_path = repo_root / "context_pack.md"
-    output_path.write_text("\n".join(parts), encoding="utf-8")
-    print(output_path.read_text(encoding="utf-8", errors="replace"))
+    output_path.write_text("\n".join(parts), encoding="utf-8", errors="replace")
+    content = output_path.read_text(encoding="utf-8", errors="replace")
+    if content.startswith("\ufeff"):
+        content = content.lstrip("\ufeff")
+    sys.stdout.buffer.write(content.encode("utf-8", errors="replace"))
+    sys.stdout.buffer.write(b"\n")
     return 0
 
 

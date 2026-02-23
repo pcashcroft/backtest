@@ -1,68 +1,28 @@
-# Daily Workflow (Beginner Friendly)
+﻿# Daily Workflow — Simple
 
-Run these steps in order. Use the `pybt` command (your preferred Python alias).
+This file is only “what to run”.
+Project rules and requirements are in design/SPEC.md.
 
-## 1) Update daily XLSX inputs (append-only)
-What you do: add new rows to your data or notes without deleting old rows.
-Why it matters: keeps history intact and auditable.
-What you should see: the file grows with new rows, no old rows removed.
+## Every day (or whenever you update Excel or data)
+1) Update your source files (append-only).
+2) Update config/run_config.xlsx in Excel if needed.
+3) Close Excel.
+4) Export the config snapshot:
+   - pybt tools/export_config_snapshot.py
 
-## 2) Edit the control plane Excel file
-File: `config/run_config.xlsx`
-What you do: update settings in the workbook (Excel control plane [source-of-truth settings]).
-Why it matters: all configuration must flow through Excel.
-What you should see: your changes saved in the workbook.
+## Ingest daily consolidated dataset
+- pybt tools/ingest_daily_consolidated.py
 
-## 3) Export a config snapshot
-Command:
-```powershell
-pybt tools/export_config_snapshot.py
-```
-What this does: creates `config/exports/config_snapshot_latest.json` (config snapshot JSON [saved copy]).
-Why it matters: Python reads the snapshot, not the live Excel file.
-What you should see: a new timestamped JSON file and an updated `config_snapshot_latest.json`.
+## Ingest ES trades (Databento DBN files)
+- C:\Users\pcash\anaconda3\envs\backtest\python.exe tools\ingest_es_trades_databento.py --incremental --only-session BOTH
 
-## 4) Run ingest jobs (coming later)
-Command (placeholder):
-```powershell
-pybt tools/ingest_<source>.py
-```
-What this will do: bring new raw data into `E:\BacktestData\raw`.
-Why it will matter: the system needs fresh data to work on.
-What you should see: new files under `E:\BacktestData\raw`.
+## Starting a new chat thread (REQUIRED process)
+When you want to start a new chat thread:
 
-## 5) Build derived data (coming later)
-Command (placeholder):
-```powershell
-pybt tools/build_derived.py
-```
-What this will do: create derived folders like `bars_1m`, `cvd_1m`, `footprint_base_1m`, `big_trade_events`.
-Why it will matter: derived data feeds charts and backtests.
-What you should see: updated files under `E:\BacktestData\derived`.
-
-## 6) Run backtests (coming later)
-Command (placeholder):
-```powershell
-pybt tools/run_backtests.py
-```
-What this will do: run strategies and record results.
-Why it will matter: backtests show performance and risk.
-What you should see: new outputs under `E:\BacktestData\runs`.
-
-## 7) Generate the context pack
-Command:
-```powershell
-pybt tools/make_context_pack.py
-```
-What this does: creates `context_pack.md` (context pack [handoff summary]).
-Why it matters: it captures the current project state for ChatGPT/Codex.
-What you should see: the file printed in the terminal and `context_pack.md` in the repo root.
-
-## Before Committing (Quality Check)
-Command:
-```powershell
-pybt tools/check_instruction_headers.py
-```
-What this does: checks every code file and notebook for the required Instruction Header.
-Why it matters: prevents unclear files from being committed.
-What you should see: `OK: All files contain the Instruction Header.`
+1) Tell ChatGPT: “start a new thread”.
+2) ChatGPT will produce updated design docs in chat.
+3) You paste one Codex prompt that applies those docs.
+4) You run the handover script once:
+   - powershell -ExecutionPolicy Bypass -File tools\end_thread_handover.ps1 -Message "Thread handover: <short message>"
+5) Paste the newly generated context_pack.md into the new chat thread.
+<CONTENT_END>
