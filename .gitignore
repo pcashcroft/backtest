@@ -11,3 +11,9 @@ venv/
 
 # Exports are generated snapshots
 config/exports/*.json
+
+# Generated / local-only
+context_pack.md
+.ipynb_checkpoints/
+archive/
+
