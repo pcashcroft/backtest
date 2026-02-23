@@ -1,23 +1,13 @@
-# Python
 __pycache__/
 *.pyc
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Data / artifacts (keep SSD data out of GitHub)
-*.duckdb
-*.parquet
-*.csv
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.idea/
+.vscode/
 *.log
 
-# Common output folders (if they ever appear inside the repo)
-runs/
-cache/
-features_cache/
-logs/
-output/
-
-# OS
-Thumbs.db
-.DS_Store
+# Exports are generated snapshots
+config/exports/*.json

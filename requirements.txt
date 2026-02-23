@@ -1,0 +1,5 @@
+openpyxl
+duckdb
+pandas
+pyarrow
+orjson
