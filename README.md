@@ -20,3 +20,13 @@ Excel is the control plane; Python reads exported JSON snapshots. The workbook i
 
 ## Notebook Policy
 No core logic in notebooks. Notebooks are for thin, reproducible analysis and visualization only.
+
+## How to Run (Phase 0)
+Use the `pybt` command (preferred Python alias):
+1. `pybt tools/make_run_config_xlsx.py`
+2. `pybt tools/bootstrap_foundation.py`
+3. `pybt tools/make_context_pack.py`
+
+## Quality Checks
+Run this before committing:
+`pybt tools/check_instruction_headers.py`

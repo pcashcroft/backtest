@@ -1,5 +1,8 @@
 # SPEC
 
+## Plain English Summary
+This project builds a careful research stack for market data, features, backtests, and optimization. Excel is the main control file, and Python reads a saved JSON snapshot. Data lives on an SSD with a standard folder layout. Notebooks are for viewing, not for core logic.
+
 Preface: Authoritative spec captured from chat; update via doc update protocol.
 
 ## PROJECT GOAL

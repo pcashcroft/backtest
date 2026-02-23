@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+"C:\Users\pcash\anaconda3\envs\backtest\python.exe" tools/check_instruction_headers.py
+if [ $? -ne 0 ]; then
+  echo "Pre-commit blocked: Instruction Header check failed."
+  exit 1
+fi

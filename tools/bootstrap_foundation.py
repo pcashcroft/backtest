@@ -1,3 +1,47 @@
+"""
+INSTRUCTION HEADER
+
+What this file does (plain English):
+- Sets up the project “data area” on your SSD (creates folders on E:).
+- Creates the DuckDB “registry” database file (a small database that stores metadata).
+- Verifies the Excel config workbook exists and is correct.
+- Exports the Excel config to a JSON snapshot so Python can read config reproducibly.
+
+Technical summary:
+- Data root (SSD): E:\\BacktestData
+- DuckDB registry file: E:\\BacktestData\\duckdb\\research.duckdb
+- Config workbook: <repo>\\config\\run_config.xlsx
+- Config snapshot output: <repo>\\config\\exports\\config_snapshot_latest.json
+
+Inputs:
+- Uses paths under E:\\BacktestData (SSD).
+- Reads the Excel workbook at config\\run_config.xlsx (the “control plane”).
+- Calls: tools\\verify_run_config_xlsx.py and tools\\export_config_snapshot.py
+
+Outputs:
+- Creates folders under E:\\BacktestData\\... (raw, canonical, derived, features_cache, runs, logs).
+- Creates/updates DuckDB tables inside research.duckdb.
+- Writes a JSON config snapshot in config\\exports\\ (also updates config_snapshot_latest.json).
+
+How to run:
+- From repo root PowerShell:
+  pybt tools/bootstrap_foundation.py
+- If you don’t have the pybt alias:
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\bootstrap_foundation.py
+
+What success looks like:
+- Prints “Foundation bootstrap complete.”
+- Prints the list of created/verified paths
+- Prints the latest snapshot path
+
+Common failures and fixes:
+- “ModuleNotFoundError: duckdb” -> install it:
+  pybt -m pip install duckdb
+- “E:\\ drive missing” -> check SSD is mounted as E: and retry.
+- “Workbook verification failed / workbook missing” ->
+  run: pybt tools/make_run_config_xlsx.py then pybt tools/verify_run_config_xlsx.py
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,15 +53,18 @@ import duckdb
 
 
 def _repo_root() -> Path:
+    """Return the repository root folder based on this file location."""
     return Path(__file__).resolve().parents[1]
 
 
 def _ensure_dirs(paths: list[Path]) -> None:
+    """Create folders if they do not exist."""
     for p in paths:
         p.mkdir(parents=True, exist_ok=True)
 
 
 def _init_duckdb(db_path: Path) -> None:
+    """Create required DuckDB registry tables if they do not exist."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(db_path))
     con.execute(
@@ -108,10 +155,12 @@ def _init_duckdb(db_path: Path) -> None:
 
 
 def _run(cmd: list[str]) -> None:
+    """Run a subprocess command and raise on failure."""
     subprocess.run(cmd, check=True)
 
 
 def main() -> int:
+    """Create SSD folder layout, init DuckDB, and export config snapshot."""
     data_root = Path("E:/BacktestData")
     db_path = data_root / "duckdb" / "research.duckdb"
 

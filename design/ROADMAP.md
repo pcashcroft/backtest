@@ -1,5 +1,8 @@
 # ROADMAP
 
+## Plain English Summary
+Phase 0 builds the foundation (folders, Excel config, registry). Phase 1+ builds ingestion, features, backtests, and optimization.
+
 ## Phase 0
 - Repository scaffolding and base docs.
 - Excel workbook skeleton.
