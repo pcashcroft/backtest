@@ -107,4 +107,3 @@ if (Test-Path $cp) {
 
 Write-Host ""
 Write-Host "DONE — Paste context_pack.md into the new chat thread."
-<CONTENT_END>
