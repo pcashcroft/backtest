@@ -1,3 +1,23 @@
+"""
+INSTRUCTION HEADER
+
+What this file does (plain English):
+- Library function that reads run_config.xlsx and writes all sheet data to a
+  JSON snapshot file on disk.
+- The snapshot is what downstream code actually reads at runtime — data loaders,
+  the backtest engine, and Jupyter notebooks all call load_snapshot() on this
+  file rather than opening the live Excel workbook directly.
+- Stamps the output with an exported_at timestamp and the source xlsx path for
+  traceability.
+- Main export: export_snapshot(xlsx_path, output_path) -> Path
+
+Where it runs: Called by tools/admin/export_config_snapshot.py (the CLI
+  wrapper that re-exports after every config change). Never run directly.
+Inputs:  xlsx_path — path to run_config.xlsx.
+         output_path — destination for the JSON snapshot file.
+Outputs: JSON file written to output_path; returns the output Path.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

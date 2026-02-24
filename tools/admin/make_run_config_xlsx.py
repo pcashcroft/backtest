@@ -1,7 +1,7 @@
 """
 INSTRUCTION HEADER
 Purpose: Create the Excel control-plane workbook with required sheets and headers.
-Inputs: Reads schema from `src/backtest/config/schema.py`.
+Inputs: Reads schema from `src/platform/config/schema.py`.
 Outputs: Writes `config/run_config.xlsx`.
 How to run: `pybt tools/admin/make_run_config_xlsx.py`
 Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\admin\\make_run_config_xlsx.py`
@@ -26,12 +26,12 @@ def _repo_root() -> Path:
 
 
 def _load_headers() -> dict[str, list[str]]:
-    """Load the Excel header schema from `src/backtest/config/schema.py`."""
+    """Load the Excel header schema from `src/platform/config/schema.py`."""
     import sys
 
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root / "src"))
-    from backtest.config.schema import HEADERS
+    from platform.config.schema import HEADERS
 
     return HEADERS
 

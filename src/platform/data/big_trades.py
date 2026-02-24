@@ -10,14 +10,14 @@ What this module does (plain English):
 - Five source modes: real_only, proxy_only, real_then_proxy, proxy_then_real, both.
 
 How to use (Jupyter / notebook):
-  from backtest.data.big_trades import get_big_trades
+  from platform.data.big_trades import get_big_trades
   df = get_big_trades("ES", "RTH", "2025-12-01", "2025-12-31")
 
 Big trade events — on-the-fly computation from canonical parquet.
 
 Public API:
 
-    from backtest.data.big_trades import get_big_trades
+    from platform.data.big_trades import get_big_trades
 
     df = get_big_trades(
         instrument_id="ES",

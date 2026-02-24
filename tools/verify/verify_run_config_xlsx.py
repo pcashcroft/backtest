@@ -1,7 +1,7 @@
 """
 INSTRUCTION HEADER
 Purpose: Verify the Excel control-plane workbook matches the expected schema.
-Inputs: Reads `config/run_config.xlsx` and schema in `src/backtest/config/schema.py`.
+Inputs: Reads `config/run_config.xlsx` and schema in `src/platform/config/schema.py`.
 Outputs: None (prints results, exits non-zero on failure).
 How to run: `pybt tools/verify/verify_run_config_xlsx.py`
 Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\verify\\verify_run_config_xlsx.py`
@@ -25,10 +25,10 @@ def _repo_root() -> Path:
 
 
 def _load_headers() -> dict[str, list[str]]:
-    """Load the Excel header schema from `src/backtest/config/schema.py`."""
+    """Load the Excel header schema from `src/platform/config/schema.py`."""
     repo_root = _repo_root()
     sys.path.insert(0, str(repo_root / "src"))
-    from backtest.config.schema import HEADERS
+    from platform.config.schema import HEADERS
 
     return HEADERS
 

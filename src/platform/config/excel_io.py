@@ -1,3 +1,18 @@
+"""
+INSTRUCTION HEADER
+
+What this file does (plain English):
+- Reads run_config.xlsx and returns each sheet as a list of row dicts, one
+  dict per data row (header row excluded), skipping any blank rows.
+- Uses HEADERS from schema.py to know which columns to read and in what order,
+  so the result is always keyed by column name rather than by position.
+- Main export: read_sheets_as_records(xlsx_path) -> dict[sheet_name, list[dict]]
+
+Where it runs: Imported by export_snapshot.py. Never run directly as a script.
+Inputs:  Path to run_config.xlsx.
+Outputs: Dict mapping sheet name -> list of {column_name: value} dicts.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

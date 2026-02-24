@@ -1,3 +1,20 @@
+"""
+INSTRUCTION HEADER
+
+What this file does (plain English):
+- Defines HEADERS: a dict mapping every run_config.xlsx sheet name to its
+  ordered list of column names.
+- This is the single source of truth for the workbook schema. Every tool that
+  reads or writes the Excel workbook uses HEADERS to know which columns exist
+  and in what order.
+- When a new column is added to the workbook (via a migrate_*.py script or
+  manually), the matching list here must be updated to keep the schema in sync.
+- Used by: excel_io.py (reading), export_snapshot.py (schema embedding),
+  load_snapshot.py (validation), and all tools/admin/*.py scripts.
+
+Where it runs: Imported only. Never run directly as a script.
+"""
+
 HEADERS = {
     "RUNBOOK": [
         "StepNo",
