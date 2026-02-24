@@ -25,6 +25,17 @@ Last updated: 2026-02-24
   - Architecture: pre-compute 1m only; higher intervals (5m/10m/30m/1h/1d) aggregated on-the-fly via DuckDB
   - Instrument-agnostic: new instruments added via DATASETS sheet row only
 
+- `footprint_base_1m` built for ES FULL + RTH: 312 FULL dates + 257 RTH dates (2025-02-24 to 2026-02-22)
+  - Output: `E:\BacktestData\derived\footprint_base_1m\ES\{FULL|RTH}\{date}\part-0.parquet`
+  - Schema: bar_time (timestamp UTC), symbol, price (float64), buy_volume (int64), sell_volume (int64), trade_count (int32)
+  - Rows: 3,590,204 FULL + 1,704,180 RTH; spread symbols excluded
+  - Higher intervals aggregated on-the-fly (sum buy/sell per price level)
+
+- `cvd_1m` built for ES FULL + RTH: 312 FULL dates + 257 RTH dates (2025-02-24 to 2026-02-22)
+  - Output: `E:\BacktestData\derived\cvd_1m\ES\{FULL|RTH}\{date}\part-0.parquet`
+  - Schema: bar_time (timestamp UTC), symbol, buy_volume (int64), sell_volume (int64), delta (int64), trade_count (int32)
+  - Rows: 476,687 FULL + 154,182 RTH; chart layer computes cumsum(delta) for the CVD line
+
 ### Tools
 - `bootstrap_foundation.py` - SSD setup + DuckDB init
 - `ingest_es_trades_databento.py` - ES trade-level data (incremental support)
@@ -42,6 +53,8 @@ Last updated: 2026-02-24
 - `migrate_run_config_add_instruments_cols.py` - Schema migration
 - `add_bars_1m_config.py` - Add any instrument's BARS_1M row to DATASETS + update INSTRUMENTS (CLI: `--instrument-id ES`)
 - `build_derived_bars_1m.py` - Build 1m OHLCV bars from 1s canonical (incremental, instrument-agnostic)
+- `add_trade_metrics_config.py` - Add any instrument's FOOTPRINT_1M + CVD_1M rows to DATASETS (CLI: `--instrument-id ES`)
+- `build_derived_trade_metrics.py` - Build footprint_base_1m and cvd_1m from trades (incremental, instrument-agnostic, dispatches on metric_type)
 
 ## In Progress
 
@@ -49,9 +62,8 @@ Last updated: 2026-02-24
 
 ## Next Up (Priority Order)
 
-1. **Derived trade metrics** - Build `footprint_base_1m` and `cvd_1m` from ES trades (FULL + RTH)
-2. **Big trade events** - Build `big_trade_events` from ES trades
-3. **Interactive Jupyter charts** - Candle charts, footprint overlay, CVD, big trade bubbles, session selector
+1. **Big trade events** - Build `big_trade_events` from ES trades
+2. **Interactive Jupyter charts** - Candle charts, footprint overlay, CVD, big trade bubbles, session selector
 5. **PnL/execution engine** - Daily + intraday backtests with realistic execution
 6. **Feature system + caching** - Feature library, engineered features, cache keyed by spec hash
 7. **Optimization + robustness** - IS/OOS, walk-forward, bootstrap, placebo, parameter sensitivity
@@ -70,3 +82,5 @@ Last updated: 2026-02-24
 - Created `add_bars_1m_config.py` (generalized DATASETS/INSTRUMENTS setup, `--instrument-id` CLI arg) and `build_derived_bars_1m.py` (incremental builder)
 - Architecture decision: pre-compute 1m only, aggregate higher intervals on-the-fly via DuckDB
 - DuckDB manifest updated for ES_BARS_1M_FULL and ES_BARS_1M_RTH
+- Built footprint_base_1m and cvd_1m for ES (312 FULL + 257 RTH dates each)
+- Created `add_trade_metrics_config.py` + `build_derived_trade_metrics.py` (instrument-agnostic, metric_type dispatch)
