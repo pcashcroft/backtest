@@ -57,6 +57,9 @@ HEADERS = {
         "cvd_dataset_id",
         "cvd_proxy_dataset_id",
         "metric_source_mode",
+        "big_trades_dataset_id",
+        "big_trades_proxy_dataset_id",
+        "big_trades_source_mode",
         "notes",
     ],
     "FEATURE_LIBRARY": [

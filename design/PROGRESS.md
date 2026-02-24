@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 2026-02-24 (Session 3)
+Last updated: 2026-02-24 (Session 4)
 
 ## Completed
 
@@ -45,7 +45,26 @@ Last updated: 2026-02-24 (Session 3)
   - cvd_proxy_1m rows: 4,896,455 FULL + 1,618,721 RTH
   - DuckDB manifest: ES_FOOTPRINT_PROXY_1M_FULL/RTH, ES_CVD_PROXY_1M_FULL/RTH (2016-02-23 → 2026-02-23)
 
-### Tools (21 scripts in 5 subdirectories)
+### Big Trade Events (Session 4)
+- `big_trade_events` computed **on-the-fly** (no pre-saved parquet) — threshold experimentation friendly
+- Architecture decision: compute at chart/backtest request time; Phase 4 feature cache handles caching for optimisation runs
+- Three threshold methods, all configured via DATASETS.notes:
+  - `fixed_count` — filter WHERE size >= min_size
+  - `rolling_pct` — percentile_cont(pct) over lookback window (pct + window_days in notes)
+  - `z_score` — mean + z_threshold * stddev over lookback window (z_threshold + window_days)
+- Separate threshold configs for real vs proxy: `ES_BIG_TRADES` (notes: min_size=50), `ES_BIG_TRADES_PROXY` (notes: min_size=100)
+- Changing threshold = edit DATASETS.notes in Excel → re-export snapshot → immediate effect, no rebuild
+- Output schema: ts_event (UTC), symbol, price (float64), size (int64), side ('B'/'S'/'N')
+  - Real: side from canonical trade side Int16 (2→'B', 1→'S', 0→'N')
+  - Proxy: BVC buy_frac>0.5→'B' at high, <0.5→'S' at low; doji skipped (ambiguous direction)
+- Same real_then_proxy / real_only / proxy_only / both source modes as footprint/CVD
+- Verified: real RTH 2026-01-02..03 → 799 events; proxy RTH 2022-01-03..05 → 7,586 events
+- New INSTRUMENTS columns: `big_trades_dataset_id`, `big_trades_proxy_dataset_id`, `big_trades_source_mode`
+- ES defaults: big_trades_dataset_id=ES_BIG_TRADES, big_trades_proxy_dataset_id=ES_BIG_TRADES_PROXY, big_trades_source_mode=real_then_proxy
+- New module: `src/backtest/data/big_trades.py` — `get_big_trades(instrument_id, session, start_date, end_date, snapshot)`
+- New admin scripts: `migrate_run_config_add_big_trades_cols.py`, `add_big_trades_config.py`
+
+### Tools (23 scripts in 5 subdirectories + 1 library module)
 
 **`tools/ingest/`** — Bring raw data in
 - `ingest_trades_databento.py` - Trade-level Databento DBN → partitioned parquet (instrument-agnostic, `--instrument-id`)
@@ -64,9 +83,14 @@ Last updated: 2026-02-24 (Session 3)
 - `add_bars_1m_config.py` - Add BARS_1M to DATASETS + update INSTRUMENTS (`--instrument-id`)
 - `add_trade_metrics_config.py` - Add FOOTPRINT_1M + CVD_1M to DATASETS (`--instrument-id`)
 - `add_trade_metrics_proxy_config.py` - Add FOOTPRINT_PROXY_1M + CVD_PROXY_1M to DATASETS (`--instrument-id`)
+- `add_big_trades_config.py` - Add BIG_TRADES + BIG_TRADES_PROXY to DATASETS + update INSTRUMENTS (`--instrument-id`, `--min-size`, `--proxy-min-size`)
 - `migrate_run_config_add_instruments_cols.py` - Schema migration (volume_col, units)
 - `migrate_run_config_add_metric_source_cols.py` - Migration: 5 metric-source columns + defaults
+- `migrate_run_config_add_big_trades_cols.py` - Migration: 3 big-trade columns + defaults
 - `update_instruments_from_macro_workbook.py` - Sync INSTRUMENTS from macro workbook
+
+**`src/backtest/data/`** — On-the-fly data computation library
+- `big_trades.py` - `get_big_trades()`: on-the-fly big trade events (real + proxy, 3 threshold methods)
 
 **`tools/verify/`** — Checks, debugging, profiling
 - `verify_run_config_xlsx.py` - Validate workbook structure
@@ -84,8 +108,8 @@ Last updated: 2026-02-24 (Session 3)
 
 ## Next Up (Priority Order)
 
-1. **Big trade events** - Build `big_trade_events` from ES trades
-2. **Interactive Jupyter charts** - Candle charts, footprint overlay, CVD (real + proxy), big trade bubbles, session selector; metric_source_mode controls which datasets to load
+1. **Interactive Jupyter charts** - Candle charts, footprint overlay, CVD (real + proxy), big trade bubbles (B/S/N colours), session selector; metric_source_mode controls which datasets to load
+2. **PnL/execution engine** - Daily + intraday backtests with realistic execution
 3. **PnL/execution engine** - Daily + intraday backtests with realistic execution
 4. **Feature system + caching** - Feature library, engineered features, cache keyed by spec hash
 5. **Optimization + robustness** - IS/OOS, walk-forward, bootstrap, placebo, parameter sensitivity
@@ -120,6 +144,22 @@ Last updated: 2026-02-24 (Session 3)
   - Footprint proxy: doji at single price 50/50; non-doji buy at high, sell at low
   - Schema-compatible with real tables (same column names) for interchangeable chart/backtest use
 - ES proxy build completed: footprint_proxy_1m + cvd_proxy_1m, 3,113 FULL + 2,578 RTH dates
+
+### Session 4 (2026-02-24) - Big Trade Events
+- Architecture decision: compute on-the-fly (no pre-saved parquet); rebuild-free threshold experimentation
+- Three threshold methods: `fixed_count`, `rolling_pct` (percentile + window_days), `z_score` (z_threshold + window_days)
+- Threshold config stored in DATASETS.notes per dataset → change method/params in Excel, re-export, immediate effect
+- Created `src/backtest/data/` package + `big_trades.py`:
+  - `get_big_trades(instrument_id, session, start_date, end_date, snapshot)` → DataFrame
+  - Dispatches on source_mode (real_only/proxy_only/real_then_proxy/proxy_then_real/both)
+  - Real path: queries canonical trades parquet, decodes side Int16 (2→'B', 1→'S', 0→'N')
+  - Proxy path: BVC from 1s OHLCV, buy_frac>0.5→'B' at high, <0.5→'S' at low, doji skipped
+  - Rolling window methods: extend load window backward by window_days; filter output to requested dates
+- Added 3 INSTRUMENTS columns to schema.py + workbook: `big_trades_dataset_id`, `big_trades_proxy_dataset_id`, `big_trades_source_mode`
+- Created `tools/admin/migrate_run_config_add_big_trades_cols.py` + `add_big_trades_config.py`
+- ES config: ES_BIG_TRADES (real, min_size=50), ES_BIG_TRADES_PROXY (proxy, min_size=100), source_mode=real_then_proxy
+- Verified: real 799 events/2 days, proxy 7,586/3 days, blend correctly separates by coverage
+- check_instruction_headers.py OK
 
 ### Session 3 (2026-02-24) - Tools Reorganisation + Ingest Generalisation
 - Removed 2 obsolete PowerShell scripts (`push_to_github.ps1`, `end_thread_handover.ps1`) — Claude Code handles git
