@@ -51,9 +51,7 @@ Last updated: 2026-02-24
 
 1. **Derived trade metrics** - Build `footprint_base_1m` and `cvd_1m` from ES trades (FULL + RTH)
 2. **Big trade events** - Build `big_trade_events` from ES trades
-2. **Derived trade metrics** - Build footprint_base_1m, cvd_1m from ES trades
-3. **Big trade events** - Build big_trade_events from ES trades
-4. **Interactive Jupyter charts** - Candle charts, footprint overlay, CVD, big trade bubbles, session selector
+3. **Interactive Jupyter charts** - Candle charts, footprint overlay, CVD, big trade bubbles, session selector
 5. **PnL/execution engine** - Daily + intraday backtests with realistic execution
 6. **Feature system + caching** - Feature library, engineered features, cache keyed by spec hash
 7. **Optimization + robustness** - IS/OOS, walk-forward, bootstrap, placebo, parameter sensitivity
