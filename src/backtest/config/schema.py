@@ -32,6 +32,11 @@ HEADERS = {
         "default_availability_lag_days",
         "canonical_table_name",
         "canonical_partition_keys",
+        "threshold_method",
+        "threshold_min_size",
+        "threshold_pct",
+        "threshold_z",
+        "threshold_window_days",
         "notes",
     ],
     "INSTRUMENTS": [

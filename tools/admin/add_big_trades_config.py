@@ -66,11 +66,6 @@ def _big_trades_row(
     source_dataset_id: str,
     min_size: int,
 ) -> dict[str, object]:
-    notes = (
-        f"instrument_id: {instrument_id}\n"
-        f"threshold_method: fixed_count\n"
-        f"min_size: {min_size}"
-    )
     return {
         "dataset_id":                    f"{instrument_id}_BIG_TRADES",
         "dataset_type":                  "big_trades",
@@ -84,7 +79,12 @@ def _big_trades_row(
         "default_availability_lag_days": 0,
         "canonical_table_name":          "big_trade_events",
         "canonical_partition_keys":      "instrument_id,session,date",
-        "notes":                         notes,
+        "threshold_method":              "fixed_count",
+        "threshold_min_size":            min_size,
+        "threshold_pct":                 None,
+        "threshold_z":                   None,
+        "threshold_window_days":         None,
+        "notes":                         f"instrument_id: {instrument_id}",
     }
 
 
@@ -93,11 +93,6 @@ def _big_trades_proxy_row(
     source_dataset_id: str,
     proxy_min_size: int,
 ) -> dict[str, object]:
-    notes = (
-        f"instrument_id: {instrument_id}\n"
-        f"threshold_method: fixed_count\n"
-        f"min_size: {proxy_min_size}"
-    )
     return {
         "dataset_id":                    f"{instrument_id}_BIG_TRADES_PROXY",
         "dataset_type":                  "big_trades_proxy",
@@ -111,7 +106,12 @@ def _big_trades_proxy_row(
         "default_availability_lag_days": 0,
         "canonical_table_name":          "big_trade_events_proxy",
         "canonical_partition_keys":      "instrument_id,session,date",
-        "notes":                         notes,
+        "threshold_method":              "fixed_count",
+        "threshold_min_size":            proxy_min_size,
+        "threshold_pct":                 None,
+        "threshold_z":                   None,
+        "threshold_window_days":         None,
+        "notes":                         f"instrument_id: {instrument_id}",
     }
 
 

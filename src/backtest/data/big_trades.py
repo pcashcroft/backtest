@@ -4,7 +4,9 @@ INSTRUCTION HEADER
 What this module does (plain English):
 - Computes big-trade events on-the-fly from canonical parquet (no pre-computed output files).
 - Supports real tick-data trades and BVC-derived proxy from 1s OHLCV.
-- Three threshold methods: fixed_count, rolling_pct, z_score — all configured via DATASETS.notes.
+- Three threshold methods: fixed_count, rolling_pct, z_score — each configured via dedicated
+  DATASETS columns (threshold_method, threshold_min_size, threshold_pct, threshold_z,
+  threshold_window_days).
 - Five source modes: real_only, proxy_only, real_then_proxy, proxy_then_real, both.
 
 How to use (Jupyter / notebook):
@@ -32,19 +34,17 @@ Public API:
     #   size     : int   (contracts)
     #   side     : str   "B"=buy/green  "S"=sell/red  "N"=neutral/grey
 
-Threshold methods (set in DATASETS.notes for each dataset):
+Threshold methods (set via DATASETS columns for each dataset):
 
-    fixed_count  → filter WHERE size >= min_size
-                   required notes key:  min_size
+    fixed_count  → filter WHERE size >= threshold_min_size
 
-    rolling_pct  → threshold = percentile(pct) of sizes in the lookback window
-                   required notes keys: pct, window_days
-                   'window_days' is calendar days used to extend start_date
-                   backward to build the lookback distribution; only events
-                   within [start_date, end_date] are returned.
+    rolling_pct  → threshold = percentile(threshold_pct) over a lookback window
+                   threshold_window_days calendar days before start_date are loaded
+                   to compute the distribution; only events within [start_date,
+                   end_date] are returned.
 
-    z_score      → threshold = mean + z_threshold * stddev over the lookback window
-                   required notes keys: z_threshold, window_days
+    z_score      → threshold = mean + threshold_z * stddev over the lookback window
+                   same window_days approach as rolling_pct
 
 Source mode (set in INSTRUMENTS.big_trades_source_mode):
 
@@ -123,7 +123,7 @@ def _find_instrument(snapshot: dict[str, Any], instrument_id: str) -> dict[str, 
 
 
 def _parse_notes(notes: str | None) -> dict[str, str]:
-    """Parse KEY: VALUE lines from a DATASETS notes field."""
+    """Parse KEY: VALUE lines from a DATASETS notes field (legacy fallback)."""
     out: dict[str, str] = {}
     for raw in (notes or "").splitlines():
         line = raw.strip()
@@ -131,6 +131,54 @@ def _parse_notes(notes: str | None) -> dict[str, str]:
             k, v = line.split(":", 1)
             out[k.strip()] = v.strip()
     return out
+
+
+def _get_threshold_config(ds: dict[str, Any]) -> dict[str, Any]:
+    """
+    Read threshold configuration from a DATASETS row.
+
+    Reads from dedicated columns (threshold_method, threshold_min_size,
+    threshold_pct, threshold_z, threshold_window_days) first; falls back
+    to parsing the notes field for backward compatibility.
+
+    Returns a dict with keys:
+      threshold_method    : str  ("fixed_count", "rolling_pct", "z_score")
+      threshold_min_size  : int  (for fixed_count)
+      threshold_pct       : float (for rolling_pct, e.g. 99.0)
+      threshold_z         : float (for z_score, e.g. 2.5)
+      threshold_window_days: int (for rolling_pct + z_score)
+    """
+    # Primary: dedicated columns
+    method = ds.get("threshold_method")
+
+    # Fallback: parse notes for backward compat with old rows
+    notes = _parse_notes(ds.get("notes"))
+
+    if not method:
+        method = notes.get("threshold_method", "fixed_count")
+
+    def _col_or_notes(col_key: str, notes_key: str, cast, default):
+        v = ds.get(col_key)
+        if v is not None and str(v).strip() != "":
+            try:
+                return cast(v)
+            except (TypeError, ValueError):
+                pass
+        v_notes = notes.get(notes_key)
+        if v_notes is not None:
+            try:
+                return cast(v_notes)
+            except (TypeError, ValueError):
+                pass
+        return default
+
+    return {
+        "threshold_method":      str(method).strip(),
+        "threshold_min_size":    _col_or_notes("threshold_min_size",  "min_size",    int,   50),
+        "threshold_pct":         _col_or_notes("threshold_pct",       "pct",         float, 99.0),
+        "threshold_z":           _col_or_notes("threshold_z",         "z_threshold", float, 2.5),
+        "threshold_window_days": _col_or_notes("threshold_window_days","window_days", int,   63),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +275,7 @@ def _compute_real(
     session: str,
     start_date: str,
     end_date: str,
-    notes: dict[str, str],
+    threshold_config: dict[str, Any],
     con: duckdb.DuckDBPyConnection,
 ) -> pd.DataFrame:
     """
@@ -235,15 +283,14 @@ def _compute_real(
 
     Side encoding in canonical: Int16  2→'B', 1→'S', 0→'N'
     """
-    src_notes = _parse_notes(source_dataset.get("notes"))
     canon_root = _canonical_root(
         data_root,
         source_dataset.get("canonical_table_name", ""),
         instrument_id,
     )
 
-    threshold_method = notes.get("threshold_method", "fixed_count")
-    window_days = int(notes.get("window_days", 63))
+    threshold_method = threshold_config["threshold_method"]
+    window_days = threshold_config["threshold_window_days"]
 
     # Determine date range to load (extended for rolling methods)
     available = _list_available_dates(canon_root, session)
@@ -266,7 +313,7 @@ def _compute_real(
     fl = _file_list_sql(files)
 
     if threshold_method == "fixed_count":
-        min_size = int(notes.get("min_size", 50))
+        min_size = threshold_config["threshold_min_size"]
         sql = f"""
             SELECT
                 ts_event,
@@ -283,7 +330,7 @@ def _compute_real(
         """
 
     elif threshold_method == "rolling_pct":
-        pct = float(notes.get("pct", 99))
+        pct = threshold_config["threshold_pct"]
         sql = f"""
             WITH base AS (
                 SELECT
@@ -311,7 +358,7 @@ def _compute_real(
         """
 
     elif threshold_method == "z_score":
-        z_threshold = float(notes.get("z_threshold", 2.5))
+        z_threshold = threshold_config["threshold_z"]
         sql = f"""
             WITH base AS (
                 SELECT
@@ -360,7 +407,7 @@ def _compute_proxy(
     session: str,
     start_date: str,
     end_date: str,
-    notes: dict[str, str],
+    threshold_config: dict[str, Any],
     con: duckdb.DuckDBPyConnection,
 ) -> pd.DataFrame:
     """
@@ -378,8 +425,8 @@ def _compute_proxy(
         instrument_id,
     )
 
-    threshold_method = notes.get("threshold_method", "fixed_count")
-    window_days = int(notes.get("window_days", 63))
+    threshold_method = threshold_config["threshold_method"]
+    window_days = threshold_config["threshold_window_days"]
 
     available = _list_available_dates(canon_root, session)
     if not available:
@@ -401,7 +448,7 @@ def _compute_proxy(
     fl = _file_list_sql(files)
 
     if threshold_method == "fixed_count":
-        min_size = int(notes.get("min_size", 100))
+        min_size = threshold_config["threshold_min_size"]
         sql = f"""
             WITH bvc AS (
                 SELECT
@@ -439,7 +486,7 @@ def _compute_proxy(
         """
 
     elif threshold_method == "rolling_pct":
-        pct = float(notes.get("pct", 99))
+        pct = threshold_config["threshold_pct"]
         sql = f"""
             WITH bvc AS (
                 SELECT
@@ -479,7 +526,7 @@ def _compute_proxy(
         """
 
     elif threshold_method == "z_score":
-        z_threshold = float(notes.get("z_threshold", 2.5))
+        z_threshold = threshold_config["threshold_z"]
         sql = f"""
             WITH bvc AS (
                 SELECT
@@ -602,7 +649,7 @@ def get_big_trades(
         src_ds = _find_dataset_by_id(snapshot, ds["source_path_or_id"])
         return _compute_real(
             data_root, src_ds, instrument_id, session,
-            start_date, end_date, _parse_notes(ds.get("notes")), con,
+            start_date, end_date, _get_threshold_config(ds), con,
         )
 
     def _get_proxy() -> pd.DataFrame:
@@ -612,7 +659,7 @@ def get_big_trades(
         src_ds = _find_dataset_by_id(snapshot, ds["source_path_or_id"])
         return _compute_proxy(
             data_root, src_ds, instrument_id, session,
-            start_date, end_date, _parse_notes(ds.get("notes")), con,
+            start_date, end_date, _get_threshold_config(ds), con,
         )
 
     if source_mode == "real_only":
