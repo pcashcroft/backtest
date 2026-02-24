@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 2026-02-24
+Last updated: 2026-02-24 (Session 2)
 
 ## Completed
 
@@ -36,6 +36,13 @@ Last updated: 2026-02-24
   - Schema: bar_time (timestamp UTC), symbol, buy_volume (int64), sell_volume (int64), delta (int64), trade_count (int32)
   - Rows: 476,687 FULL + 154,182 RTH; chart layer computes cumsum(delta) for the CVD line
 
+- `footprint_proxy_1m` + `cvd_proxy_1m` building for ES FULL + RTH: 3,113 FULL + 2,578 RTH dates (2016-02-22 to 2026-02-22)
+  - Built from 1s OHLCV using BVC: buy_frac=(close-low)/(high-low), fallback 0.5 for doji bars
+  - Footprint price assignment: doji bars → single price 50/50; non-doji → buy at high, sell at low
+  - Same schema as real tables for chart/backtest interoperability; `trade_count` = number of 1s bars
+  - Output: `E:\BacktestData\derived\footprint_proxy_1m\ES\` and `cvd_proxy_1m\ES\`
+  - Build in progress (started 2026-02-24)
+
 ### Tools
 - `bootstrap_foundation.py` - SSD setup + DuckDB init
 - `ingest_es_trades_databento.py` - ES trade-level data (incremental support)
@@ -55,18 +62,21 @@ Last updated: 2026-02-24
 - `build_derived_bars_1m.py` - Build 1m OHLCV bars from 1s canonical (incremental, instrument-agnostic)
 - `add_trade_metrics_config.py` - Add any instrument's FOOTPRINT_1M + CVD_1M rows to DATASETS (CLI: `--instrument-id ES`)
 - `build_derived_trade_metrics.py` - Build footprint_base_1m and cvd_1m from trades (incremental, instrument-agnostic, dispatches on metric_type)
+- `migrate_run_config_add_metric_source_cols.py` - One-time migration: adds 5 metric-source columns to INSTRUMENTS sheet + sets defaults
+- `add_trade_metrics_proxy_config.py` - Add any instrument's FOOTPRINT_PROXY_1M + CVD_PROXY_1M rows to DATASETS + update INSTRUMENTS (CLI: `--instrument-id ES`)
+- `build_derived_trade_metrics_proxy.py` - Build footprint_proxy_1m and cvd_proxy_1m from 1s OHLCV using BVC (incremental, instrument-agnostic)
 
 ## In Progress
 
-*(nothing)*
+- `footprint_proxy_1m` + `cvd_proxy_1m` build running (3,113 FULL + 2,578 RTH dates)
 
 ## Next Up (Priority Order)
 
 1. **Big trade events** - Build `big_trade_events` from ES trades
-2. **Interactive Jupyter charts** - Candle charts, footprint overlay, CVD, big trade bubbles, session selector
-5. **PnL/execution engine** - Daily + intraday backtests with realistic execution
-6. **Feature system + caching** - Feature library, engineered features, cache keyed by spec hash
-7. **Optimization + robustness** - IS/OOS, walk-forward, bootstrap, placebo, parameter sensitivity
+2. **Interactive Jupyter charts** - Candle charts, footprint overlay, CVD (real + proxy), big trade bubbles, session selector; metric_source_mode controls which datasets to load
+3. **PnL/execution engine** - Daily + intraday backtests with realistic execution
+4. **Feature system + caching** - Feature library, engineered features, cache keyed by spec hash
+5. **Optimization + robustness** - IS/OOS, walk-forward, bootstrap, placebo, parameter sensitivity
 
 ## Session Log
 
@@ -84,3 +94,17 @@ Last updated: 2026-02-24
 - DuckDB manifest updated for ES_BARS_1M_FULL and ES_BARS_1M_RTH
 - Built footprint_base_1m and cvd_1m for ES (312 FULL + 257 RTH dates each)
 - Created `add_trade_metrics_config.py` + `build_derived_trade_metrics.py` (instrument-agnostic, metric_type dispatch)
+
+### Session 2 (2026-02-24) - Proxy Trade Metrics + Metric Source Config
+- Confirmed 10 years of 1s OHLCV coverage: 3,113 FULL dates, 2,578 RTH dates (2016-02-22 to 2026-02-22)
+- Designed metric source configuration: `metric_source_mode` column (real_only / proxy_only / real_then_proxy / proxy_then_real / both) controls chart and backtest data resolution per instrument
+- Added 5 metric-source columns to INSTRUMENTS schema (schema.py + workbook migration):
+  `footprint_dataset_id`, `footprint_proxy_dataset_id`, `cvd_dataset_id`, `cvd_proxy_dataset_id`, `metric_source_mode`
+- Folded `volume_col` and `units` into schema.py (were previously special-cased in make_run_config_xlsx.py)
+- Created `migrate_run_config_add_metric_source_cols.py` - migrates existing workbook + sets ES defaults
+- ES INSTRUMENTS defaults set: footprint_dataset_id=ES_FOOTPRINT_1M, cvd_dataset_id=ES_CVD_1M, metric_source_mode=real_then_proxy
+- Created `add_trade_metrics_proxy_config.py` + `build_derived_trade_metrics_proxy.py`
+  - BVC method: buy_frac=(close-low)/(high-low), fallback 0.5 for doji bars
+  - Footprint proxy: doji at single price 50/50; non-doji buy at high, sell at low
+  - Schema-compatible with real tables (same column names) for interchangeable chart/backtest use
+- ES proxy build started: footprint_proxy_1m + cvd_proxy_1m, 3,113 FULL + 2,578 RTH dates

@@ -48,8 +48,6 @@ def main() -> int:
     header_font = Font(bold=True)
 
     for sheet_name, cols in headers.items():
-        if sheet_name == "INSTRUMENTS":
-            cols = [*cols, "volume_col", "units"]
         ws = wb.create_sheet(title=sheet_name)
         ws.append(cols)
         for cell in ws[1]:
