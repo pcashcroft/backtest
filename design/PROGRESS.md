@@ -40,7 +40,7 @@ Last updated: 2026-02-24
 - `update_design_folder_layout.py` - Auto-generate FOLDER_LAYOUT.md
 - `update_instruments_from_macro_workbook.py` - Sync INSTRUMENTS from workbook
 - `migrate_run_config_add_instruments_cols.py` - Schema migration
-- `add_es_bars_1m_config.py` - One-time: add ES_BARS_1M to DATASETS + update INSTRUMENTS
+- `add_bars_1m_config.py` - Add any instrument's BARS_1M row to DATASETS + update INSTRUMENTS (CLI: `--instrument-id ES`)
 - `build_derived_bars_1m.py` - Build 1m OHLCV bars from 1s canonical (incremental, instrument-agnostic)
 
 ## In Progress
@@ -67,6 +67,6 @@ Last updated: 2026-02-24
 - Code cleanup: config module exports, removed empty placeholder dirs, consistency fixes
 - Deleted make_context_pack.py (unnecessary with Claude Code direct file access)
 - Built `bars_1m` for ES: 3,113 FULL dates + 2,578 RTH dates from 1s canonical data
-- Created `add_es_bars_1m_config.py` (one-time DATASETS/INSTRUMENTS setup) and `build_derived_bars_1m.py` (incremental builder)
+- Created `add_bars_1m_config.py` (generalized DATASETS/INSTRUMENTS setup, `--instrument-id` CLI arg) and `build_derived_bars_1m.py` (incremental builder)
 - Architecture decision: pre-compute 1m only, aggregate higher intervals on-the-fly via DuckDB
 - DuckDB manifest updated for ES_BARS_1M_FULL and ES_BARS_1M_RTH
