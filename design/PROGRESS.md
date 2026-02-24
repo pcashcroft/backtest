@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 2026-02-24 (Session 4)
+Last updated: 2026-02-24 (Session 5)
 
 ## Completed
 
@@ -48,12 +48,12 @@ Last updated: 2026-02-24 (Session 4)
 ### Big Trade Events (Session 4)
 - `big_trade_events` computed **on-the-fly** (no pre-saved parquet) — threshold experimentation friendly
 - Architecture decision: compute at chart/backtest request time; Phase 4 feature cache handles caching for optimisation runs
-- Three threshold methods, all configured via DATASETS.notes:
+- Three threshold methods, all configured via dedicated DATASETS columns (threshold_method, threshold_min_size, threshold_pct, threshold_z, threshold_window_days):
   - `fixed_count` — filter WHERE size >= min_size
-  - `rolling_pct` — percentile_cont(pct) over lookback window (pct + window_days in notes)
+  - `rolling_pct` — percentile_cont(pct) over lookback window (pct + window_days as columns)
   - `z_score` — mean + z_threshold * stddev over lookback window (z_threshold + window_days)
-- Separate threshold configs for real vs proxy: `ES_BIG_TRADES` (notes: min_size=50), `ES_BIG_TRADES_PROXY` (notes: min_size=100)
-- Changing threshold = edit DATASETS.notes in Excel → re-export snapshot → immediate effect, no rebuild
+- Separate threshold configs for real vs proxy: `ES_BIG_TRADES` (min_size=50), `ES_BIG_TRADES_PROXY` (min_size=100)
+- Changing threshold = edit dedicated DATASETS columns in Excel → re-export snapshot → immediate effect, no rebuild
 - Output schema: ts_event (UTC), symbol, price (float64), size (int64), side ('B'/'S'/'N')
   - Real: side from canonical trade side Int16 (2→'B', 1→'S', 0→'N')
   - Proxy: BVC buy_frac>0.5→'B' at high, <0.5→'S' at low; doji skipped (ambiguous direction)
@@ -61,7 +61,7 @@ Last updated: 2026-02-24 (Session 4)
 - Verified: real RTH 2026-01-02..03 → 799 events; proxy RTH 2022-01-03..05 → 7,586 events
 - New INSTRUMENTS columns: `big_trades_dataset_id`, `big_trades_proxy_dataset_id`, `big_trades_source_mode`
 - ES defaults: big_trades_dataset_id=ES_BIG_TRADES, big_trades_proxy_dataset_id=ES_BIG_TRADES_PROXY, big_trades_source_mode=real_then_proxy
-- New module: `src/backtest/data/big_trades.py` — `get_big_trades(instrument_id, session, start_date, end_date, snapshot)`
+- New module: `src/platform/data/big_trades.py` — `get_big_trades(instrument_id, session, start_date, end_date, snapshot)`
 - New admin scripts: `migrate_run_config_add_big_trades_cols.py`, `add_big_trades_config.py`
 
 ### Tools (23 scripts in 5 subdirectories + 1 library module)
@@ -87,9 +87,10 @@ Last updated: 2026-02-24 (Session 4)
 - `migrate_run_config_add_instruments_cols.py` - Schema migration (volume_col, units)
 - `migrate_run_config_add_metric_source_cols.py` - Migration: 5 metric-source columns + defaults
 - `migrate_run_config_add_big_trades_cols.py` - Migration: 3 big-trade columns + defaults
+- `migrate_run_config_add_threshold_cols.py` - Migration: 5 threshold columns to DATASETS + defaults
 - `update_instruments_from_macro_workbook.py` - Sync INSTRUMENTS from macro workbook
 
-**`src/backtest/data/`** — On-the-fly data computation library
+**`src/platform/data/`** — On-the-fly data computation library
 - `big_trades.py` - `get_big_trades()`: on-the-fly big trade events (real + proxy, 3 threshold methods)
 
 **`tools/verify/`** — Checks, debugging, profiling
@@ -145,11 +146,20 @@ Last updated: 2026-02-24 (Session 4)
   - Schema-compatible with real tables (same column names) for interchangeable chart/backtest use
 - ES proxy build completed: footprint_proxy_1m + cvd_proxy_1m, 3,113 FULL + 2,578 RTH dates
 
+### Session 5 (2026-02-24) - Package rename + header hygiene
+- Renamed `src/backtest/` → `src/platform/` (better reflects scope: config, data, future charts + engine)
+- Added INSTRUCTION HEADER docstrings (plain English) to the 5 config module files that were missing them:
+  `config/__init__.py`, `schema.py`, `excel_io.py`, `export_snapshot.py`, `load_snapshot.py`
+- Updated all import references in tools and docstrings (no functional changes)
+- Deleted stale `src/backtest/__pycache__/` left over from git mv
+- Fixed `migrate_run_config_add_threshold_cols.py` missing from tools list in PROGRESS.md
+- Fixed stale `src/backtest/` references in Session 4 notes and tools list
+
 ### Session 4 (2026-02-24) - Big Trade Events
 - Architecture decision: compute on-the-fly (no pre-saved parquet); rebuild-free threshold experimentation
 - Three threshold methods: `fixed_count`, `rolling_pct` (percentile + window_days), `z_score` (z_threshold + window_days)
 - Threshold config stored in DATASETS.notes per dataset → change method/params in Excel, re-export, immediate effect
-- Created `src/backtest/data/` package + `big_trades.py`:
+- Created `src/platform/data/` package + `big_trades.py`:
   - `get_big_trades(instrument_id, session, start_date, end_date, snapshot)` → DataFrame
   - Dispatches on source_mode (real_only/proxy_only/real_then_proxy/proxy_then_real/both)
   - Real path: queries canonical trades parquet, decodes side Int16 (2→'B', 1→'S', 0→'N')
