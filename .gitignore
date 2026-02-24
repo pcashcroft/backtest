@@ -16,4 +16,5 @@ config/exports/*.json
 context_pack.md
 .ipynb_checkpoints/
 archive/
+.claude/
 

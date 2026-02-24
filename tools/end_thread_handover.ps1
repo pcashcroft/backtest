@@ -58,6 +58,11 @@ Write-Host "Running instruction-header check..."
 & $pyExe tools/check_instruction_headers.py
 if ($LASTEXITCODE -ne 0) { throw "Instruction header check failed." }
 
+# 1.5) Update design folder layout
+Write-Host "Updating design folder layout..."
+& $pyExe tools/update_design_folder_layout.py
+if ($LASTEXITCODE -ne 0) { throw "Design folder layout update failed." }
+
 # 2) Show status
 Write-Host ""
 Write-Host "Git status:"

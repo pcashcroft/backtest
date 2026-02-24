@@ -87,6 +87,8 @@ _BINARY_SUFFIXES = {
     ".pdf", ".zip", ".whl", ".exe", ".dll",
 }
 
+_ALWAYS_FULL: set[Path] = set()
+
 
 def _include_file(path: Path) -> str:
     if not path.exists() or not path.is_file():
@@ -98,6 +100,8 @@ def _include_file(path: Path) -> str:
 
     text = _read_text(path)
     lines = text.splitlines()
+    if path in _ALWAYS_FULL:
+        return "\n".join(lines)
     if len(lines) < 300:
         return "\n".join(lines)
     top = "\n".join(lines[:120])
@@ -193,15 +197,11 @@ def main() -> int:
     # Key docs included every time (this is the memory for new threads)
     key_docs = [
         repo_root / "design" / "SPEC.md",
-        repo_root / "design" / "WORKFLOW.md",
-        repo_root / "design" / "ROADMAP.md",
-        repo_root / "design" / "DOC_UPDATE_PROTOCOL.md",
-        repo_root / "design" / "DECISIONS.md",
-        repo_root / "design" / "PROGRESS.md",
-        repo_root / "instructions" / "00_setup.md",
-        repo_root / "instructions" / "01_daily_workflow.md",
-        repo_root / "instructions" / "STYLE_GUIDE.md",
+        repo_root / "instructions" / "RUNBOOK.md",
+        repo_root / "design" / "FOLDER_LAYOUT.md",
     ]
+    global _ALWAYS_FULL
+    _ALWAYS_FULL = set(key_docs)
 
     parts: list[str] = []
     parts.append("# Context Pack")
@@ -220,22 +220,6 @@ def main() -> int:
     decisions = repo_root / "design" / "DECISIONS.md"
     progress = repo_root / "design" / "PROGRESS.md"
     if decisions.exists() or progress.exists():
-        parts.append("## Handover Summary")
-        if progress.exists():
-            parts.append("### Progress (full file below in Key Docs)")
-            parts.append("```text")
-            parts.append(_include_file(progress))
-            parts.append("```")
-        if decisions.exists():
-            parts.append("### Recent decisions (full file below in Key Docs)")
-            parts.append("```text")
-            # show only the bottom ~60 lines so it’s not too repetitive
-            txt = _read_text(decisions).splitlines()
-            tail = "\n".join(txt[-60:]) if len(txt) > 60 else "\n".join(txt)
-            parts.append(tail)
-            parts.append("```")
-        parts.append("")
-
     parts.append("## Folder Tree (2-3 levels)")
     parts.append("```text")
     parts.extend(_folder_tree(repo_root, max_depth=3))
