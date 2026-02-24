@@ -2,14 +2,22 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-import json
 
 from .schema import HEADERS
 
 
+def _json_loads(raw: bytes) -> Any:
+    try:
+        import orjson
+        return orjson.loads(raw)
+    except ImportError:
+        import json
+        return json.loads(raw)
+
+
 def load_snapshot(json_path: str | Path) -> dict[str, Any]:
     json_path = Path(json_path)
-    data = json.loads(json_path.read_text(encoding="utf-8"))
+    data = _json_loads(json_path.read_bytes())
 
     if "sheets" not in data or not isinstance(data["sheets"], dict):
         raise ValueError("Snapshot missing 'sheets' dict.")
