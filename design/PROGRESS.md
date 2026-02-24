@@ -17,6 +17,14 @@ Last updated: 2026-02-24
 - Daily series ingested from consolidated.xlsm → canonical parquet by year (2009-2026)
 - Macro instruments ingested from Macro_Instruments.xlsx → daily_series canonical parquet
 
+### Derived Data
+- `bars_1m` built for ES FULL + RTH: 3,113 FULL dates + 2,578 RTH dates (2016-02-23 to 2026-02-22)
+  - Output: `E:\BacktestData\derived\bars_1m\ES\{FULL|RTH}\{date}\part-0.parquet`
+  - Schema: bar_time (timestamp[us, tz=UTC]), symbol, open, high, low, close (float64), volume (int64), tick_count (int32)
+  - DuckDB manifest updated: ES_BARS_1M_FULL (2016-02-23 → 2026-02-23), ES_BARS_1M_RTH (2016-02-23 → 2026-02-21)
+  - Architecture: pre-compute 1m only; higher intervals (5m/10m/30m/1h/1d) aggregated on-the-fly via DuckDB
+  - Instrument-agnostic: new instruments added via DATASETS sheet row only
+
 ### Tools
 - `bootstrap_foundation.py` - SSD setup + DuckDB init
 - `ingest_es_trades_databento.py` - ES trade-level data (incremental support)
@@ -29,18 +37,20 @@ Last updated: 2026-02-24
 - `verify_duckdb_registry.py` - Check DuckDB tables
 - `check_instruction_headers.py` - Enforce documentation standard
 - `profile_databento_dbn.py` - Inspect DBN file stats
-- `make_context_pack.py` - Generate handover docs
 - `update_design_folder_layout.py` - Auto-generate FOLDER_LAYOUT.md
 - `update_instruments_from_macro_workbook.py` - Sync INSTRUMENTS from workbook
 - `migrate_run_config_add_instruments_cols.py` - Schema migration
+- `add_es_bars_1m_config.py` - One-time: add ES_BARS_1M to DATASETS + update INSTRUMENTS
+- `build_derived_bars_1m.py` - Build 1m OHLCV bars from 1s canonical (incremental, instrument-agnostic)
 
 ## In Progress
 
-- Migration from ChatGPT/Codex workflow to Claude Code (this session)
+*(nothing)*
 
 ## Next Up (Priority Order)
 
-1. **Derived OHLCV bars** - Build 1m/5m/10m/30m/1h/1d bars from 1s canonical data (FULL + RTH)
+1. **Derived trade metrics** - Build `footprint_base_1m` and `cvd_1m` from ES trades (FULL + RTH)
+2. **Big trade events** - Build `big_trade_events` from ES trades
 2. **Derived trade metrics** - Build footprint_base_1m, cvd_1m from ES trades
 3. **Big trade events** - Build big_trade_events from ES trades
 4. **Interactive Jupyter charts** - Candle charts, footprint overlay, CVD, big trade bubbles, session selector
@@ -50,11 +60,15 @@ Last updated: 2026-02-24
 
 ## Session Log
 
-### Session 1 (2026-02-24) - Migration to Claude Code
+### Session 1 (2026-02-24) - Migration to Claude Code + Derived Bars
 - Installed GitHub CLI (gh v2.87.3)
 - Cleaned up main branch: removed 8 stale design/instruction files from ChatGPT workflow
 - Added design/FOLDER_LAYOUT.md and tools/update_design_folder_layout.py
-- Fixed BOM in make_context_pack.py
 - Created this PROGRESS.md as dedicated progress tracker (separate from SPEC.md)
 - Established workflow: Claude Code for coding/git, Cursor for IDE, Jupyter for charts only
 - Code cleanup: config module exports, removed empty placeholder dirs, consistency fixes
+- Deleted make_context_pack.py (unnecessary with Claude Code direct file access)
+- Built `bars_1m` for ES: 3,113 FULL dates + 2,578 RTH dates from 1s canonical data
+- Created `add_es_bars_1m_config.py` (one-time DATASETS/INSTRUMENTS setup) and `build_derived_bars_1m.py` (incremental builder)
+- Architecture decision: pre-compute 1m only, aggregate higher intervals on-the-fly via DuckDB
+- DuckDB manifest updated for ES_BARS_1M_FULL and ES_BARS_1M_RTH
