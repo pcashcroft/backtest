@@ -1,18 +1,18 @@
-﻿<# 
+﻿<#
 INSTRUCTION HEADER
 
 What this script does (plain English):
 - Saves all current work into git (commit + push).
-- Regenerates context_pack.md, which you paste into the next chat thread.
+- Updates design/FOLDER_LAYOUT.md with current SSD/repo structure.
 
 Where to run it:
 - Run from the repo root folder: C:\Users\pcash\OneDrive\Backtest
 
 How to run:
-powershell -ExecutionPolicy Bypass -File tools\end_thread_handover.ps1 -Message "Thread handover: <short message>"
+powershell -ExecutionPolicy Bypass -File tools\end_thread_handover.ps1 -Message “Session N: <short message>”
 
 What “success” looks like:
-- It prints “DONE” and says it copied context_pack.md to clipboard.
+- It prints “DONE” after committing and pushing.
 
 Common problems:
 - If “push” fails due to network, run `git push` manually after reconnecting.
@@ -94,21 +94,5 @@ try {
   Write-Host "WARNING: git push failed. You can run 'git push' manually later."
 }
 
-# 6) Regenerate context pack
 Write-Host ""
-Write-Host "Generating context pack..."
-& $pyExe tools/make_context_pack.py
-
-# 7) Copy to clipboard (best effort)
-$cp = Join-Path (Get-Location) "context_pack.md"
-if (Test-Path $cp) {
-  try {
-    Get-Content $cp | Set-Clipboard
-    Write-Host "Copied context_pack.md to clipboard."
-  } catch {
-    Write-Host "Could not copy to clipboard automatically. You can open context_pack.md and copy it manually."
-  }
-}
-
-Write-Host ""
-Write-Host "DONE — Paste context_pack.md into the new chat thread."
+Write-Host "DONE — Changes committed and pushed."

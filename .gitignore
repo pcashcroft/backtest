@@ -13,7 +13,6 @@ venv/
 config/exports/*.json
 
 # Generated / local-only
-context_pack.md
 .ipynb_checkpoints/
 archive/
 .claude/
