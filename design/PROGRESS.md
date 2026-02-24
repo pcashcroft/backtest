@@ -36,12 +36,14 @@ Last updated: 2026-02-24 (Session 2)
   - Schema: bar_time (timestamp UTC), symbol, buy_volume (int64), sell_volume (int64), delta (int64), trade_count (int32)
   - Rows: 476,687 FULL + 154,182 RTH; chart layer computes cumsum(delta) for the CVD line
 
-- `footprint_proxy_1m` + `cvd_proxy_1m` building for ES FULL + RTH: 3,113 FULL + 2,578 RTH dates (2016-02-22 to 2026-02-22)
+- `footprint_proxy_1m` + `cvd_proxy_1m` built for ES FULL + RTH: 3,113 FULL + 2,578 RTH dates (2016-02-22 to 2026-02-22)
   - Built from 1s OHLCV using BVC: buy_frac=(close-low)/(high-low), fallback 0.5 for doji bars
   - Footprint price assignment: doji bars → single price 50/50; non-doji → buy at high, sell at low
   - Same schema as real tables for chart/backtest interoperability; `trade_count` = number of 1s bars
   - Output: `E:\BacktestData\derived\footprint_proxy_1m\ES\` and `cvd_proxy_1m\ES\`
-  - Build in progress (started 2026-02-24)
+  - footprint_proxy_1m rows: 23,679,891 FULL + 10,803,863 RTH
+  - cvd_proxy_1m rows: 4,896,455 FULL + 1,618,721 RTH
+  - DuckDB manifest: ES_FOOTPRINT_PROXY_1M_FULL/RTH, ES_CVD_PROXY_1M_FULL/RTH (2016-02-23 → 2026-02-23)
 
 ### Tools
 - `bootstrap_foundation.py` - SSD setup + DuckDB init
@@ -68,7 +70,7 @@ Last updated: 2026-02-24 (Session 2)
 
 ## In Progress
 
-- `footprint_proxy_1m` + `cvd_proxy_1m` build running (3,113 FULL + 2,578 RTH dates)
+*(nothing)*
 
 ## Next Up (Priority Order)
 
