@@ -199,7 +199,7 @@ def _build_footprint_proxy(
     sql = f"""
     WITH bvc AS (
         SELECT
-            date_trunc('minute', bar_time)                         AS bar_time,
+            date_trunc('minute', ts_event)                         AS bar_time,
             symbol,
             high,
             low,
@@ -288,7 +288,7 @@ def _build_cvd_proxy(
     sql = f"""
     WITH bvc AS (
         SELECT
-            date_trunc('minute', bar_time)                         AS bar_time,
+            date_trunc('minute', ts_event)                         AS bar_time,
             symbol,
             CAST(volume AS BIGINT)                                 AS volume,
             CASE
