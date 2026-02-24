@@ -3,33 +3,33 @@ INSTRUCTION HEADER
 
 What this file does (plain English):
 - Ingests Databento 1-second OHLCV DBN files into canonical parquet partitions on SSD.
+- Instrument-agnostic: works for ES, NQ, or any future instrument via --instrument-id CLI arg.
 - Writes BOTH sessions:
   - FULL: all rows
-  - RTH: 09:30?16:00 America/New_York, weekdays only
-- Symbol filtering is controlled by config (DATASETS.notes for DB_ES_OHLCV_1S), and spreads are excluded by default.
+  - RTH: 09:30-16:00 America/New_York, weekdays only
+- Symbol filtering is controlled by config (DATASETS.notes), and spreads are excluded by default.
 
-Where to run it:
-- Run from repo root: C:/Users/pcash/OneDrive/Backtest
-
-Inputs:
-- config/exports/config_snapshot_latest.json
-- DBN files matched by DATASETS.dataset_id=DB_ES_OHLCV_1S source_path_or_id glob
-
-Outputs:
-- Canonical parquet under: E:/BacktestData/canonical/es_ohlcv_1s
-  partitioned by session and NY date:
-  session=FULL/date=YYYY-MM-DD/...
-  session=RTH/date=YYYY-MM-DD/...
+Where to run:
+- Run from repo root: C:\\Users\\pcash\\OneDrive\\Backtest
 
 How to run:
-C:/Users/pcash/anaconda3/envs/backtest/python.exe tools/ingest_ohlcv_1s_databento.py
+  # Ingest ES 1s OHLCV:
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\ingest\\ingest_ohlcv_1s_databento.py --instrument-id ES
+
+  # Ingest NQ 1s OHLCV:
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\ingest\\ingest_ohlcv_1s_databento.py --instrument-id NQ
 
 What success looks like:
-- It prints matched files, rows loaded, symbol filtering stats, unique NY dates, and a per-day progress bar while writing.
+- Prints matched files, rows loaded, symbol filtering stats, unique NY dates, and a per-day progress bar while writing.
+
+Common failures + fixes:
+- databento missing -> install package; DBN files missing -> check DATASETS.source_path_or_id glob;
+  DuckDB missing -> install duckdb; permission issues -> ensure canonical root is writable.
 """
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import hashlib
 import json
@@ -45,9 +45,7 @@ import pyarrow.dataset as ds
 
 SNAPSHOT_PATH = Path("config/exports/config_snapshot_latest.json")
 DATA_ROOT = Path("E:/BacktestData")
-CANONICAL_ROOT = DATA_ROOT / "canonical" / "es_ohlcv_1s"
 DUCKDB_PATH = DATA_ROOT / "duckdb" / "research.duckdb"
-DATASET_ID = "DB_ES_OHLCV_1S"
 
 KEEP_COLS = ["ts_event", "symbol", "open", "high", "low", "close", "volume"]
 
@@ -209,8 +207,19 @@ def _upsert_registry(dataset_id: str, spec_json: str) -> None:
     con.close()
 
 
-def _insert_manifest(session: str, spec_hash: str, start: dt.datetime, end: dt.datetime) -> tuple[Any, ...]:
+def _insert_manifest(
+    instrument_id: str,
+    canonical_root: Path,
+    session: str,
+    spec_hash: str,
+    start: dt.datetime,
+    end: dt.datetime,
+) -> tuple[Any, ...]:
     now = dt.datetime.now()
+    iid = instrument_id.lower()
+    derived_id = f"canonical_{iid}_ohlcv_1s"
+    table_name = f"{iid}_ohlcv_1s"
+
     con = duckdb.connect(str(DUCKDB_PATH))
     con.execute(
         """
@@ -219,24 +228,24 @@ def _insert_manifest(session: str, spec_hash: str, start: dt.datetime, end: dt.d
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            "canonical_es_ohlcv_1s",
-            "es_ohlcv_1s",
+            derived_id,
+            table_name,
             spec_hash,
             session,
             start,
             end,
-            str(CANONICAL_ROOT),
+            str(canonical_root),
             now,
         ],
     )
     row = con.execute(
         """
         SELECT * FROM manifest_derived_tables
-        WHERE derived_id='canonical_es_ohlcv_1s' AND session=?
+        WHERE derived_id=? AND session=?
         ORDER BY created_at DESC
         LIMIT 1
         """,
-        [session],
+        [derived_id, session],
     ).fetchone()
     con.close()
     return row
@@ -263,13 +272,36 @@ def _progress_iter(dates: list[dt.date]):
         return _Fallback()
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Ingest Databento 1-second OHLCV DBN files for any instrument."
+    )
+    parser.add_argument(
+        "--instrument-id",
+        required=True,
+        metavar="ID",
+        help="Instrument ID matching the DATASETS sheet (e.g. ES, NQ).",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = _parse_args()
+    instrument_id = args.instrument_id.strip().upper()
+    dataset_id = f"DB_{instrument_id}_OHLCV_1S"
+    canonical_root = DATA_ROOT / "canonical" / f"{instrument_id.lower()}_ohlcv_1s"
+
     snapshot = _load_snapshot(SNAPSHOT_PATH)
-    dataset = _find_dataset_row(snapshot, DATASET_ID)
+    dataset = _find_dataset_row(snapshot, dataset_id)
 
     source_glob = dataset.get("source_path_or_id")
     if not source_glob:
-        raise ValueError("Missing source_path_or_id for DB_ES_OHLCV_1S in snapshot.")
+        raise ValueError(f"Missing source_path_or_id for {dataset_id} in snapshot.")
+
+    print(f"Instrument: {instrument_id}")
+    print(f"Dataset: {dataset_id}")
+    print(f"Source glob: {source_glob}")
+    print(f"Canonical root: {canonical_root}")
 
     notes_kv = _parse_notes(dataset.get("notes") or "")
     include_regex = notes_kv.get("symbol_include_regex", "")
@@ -283,7 +315,7 @@ def main() -> int:
     for f in files:
         print(f"  {f}", flush=True)
 
-    CANONICAL_ROOT.mkdir(parents=True, exist_ok=True)
+    canonical_root.mkdir(parents=True, exist_ok=True)
 
     total_full_written = 0
     total_rth_written = 0
@@ -342,7 +374,7 @@ def main() -> int:
 
         for d in iterator:
             # FULL
-            full_dir = _partition_dir(CANONICAL_ROOT, "FULL", d)
+            full_dir = _partition_dir(canonical_root, "FULL", d)
             if full_dir.exists():
                 try:
                     from tqdm import tqdm  # type: ignore
@@ -351,10 +383,10 @@ def main() -> int:
                     print(f"SKIP FULL date={d}", flush=True)
             else:
                 df_day = df[df["date"] == d].drop(columns=["is_rth"])
-                total_full_written += _write_partition(df_day, CANONICAL_ROOT, "FULL")
+                total_full_written += _write_partition(df_day, canonical_root, "FULL")
 
             # RTH
-            rth_dir = _partition_dir(CANONICAL_ROOT, "RTH", d)
+            rth_dir = _partition_dir(canonical_root, "RTH", d)
             if rth_dir.exists():
                 try:
                     from tqdm import tqdm  # type: ignore
@@ -365,7 +397,7 @@ def main() -> int:
                 df_day = df[df["date"] == d]
                 df_day_rth = df_day[df_day["is_rth"]].drop(columns=["is_rth"])
                 if not df_day_rth.empty:
-                    total_rth_written += _write_partition(df_day_rth, CANONICAL_ROOT, "RTH")
+                    total_rth_written += _write_partition(df_day_rth, canonical_root, "RTH")
 
     if full_min is None or full_max is None:
         raise ValueError("No FULL coverage computed; refusing to insert manifest.")
@@ -378,19 +410,19 @@ def main() -> int:
             "rth_start": rth_start,
             "rth_end": rth_end,
             "rth_tz": rth_tz,
-            "canonical_root": str(CANONICAL_ROOT),
+            "canonical_root": str(canonical_root),
             "keep_cols": KEEP_COLS,
             "writer_mode": "day_partition",
         }
     )
-    spec_hash = _spec_hash(DATASET_ID, include_regex, exclude_contains, rth_start, rth_end, rth_tz)
+    spec_hash = _spec_hash(dataset_id, include_regex, exclude_contains, rth_start, rth_end, rth_tz)
 
-    _upsert_registry(DATASET_ID, spec_json)
-    manifest_full = _insert_manifest("FULL", spec_hash, full_min.to_pydatetime(), full_max.to_pydatetime())
+    _upsert_registry(dataset_id, spec_json)
+    manifest_full = _insert_manifest(instrument_id, canonical_root, "FULL", spec_hash, full_min.to_pydatetime(), full_max.to_pydatetime())
 
     manifest_rth = None
     if rth_min is not None and rth_max is not None:
-        manifest_rth = _insert_manifest("RTH", spec_hash, rth_min.to_pydatetime(), rth_max.to_pydatetime())
+        manifest_rth = _insert_manifest(instrument_id, canonical_root, "RTH", spec_hash, rth_min.to_pydatetime(), rth_max.to_pydatetime())
 
     sym_sorted = sorted(symbols_after)
 
@@ -402,7 +434,7 @@ def main() -> int:
     print(f"RTH min/max ts_event: {rth_min} / {rth_max}", flush=True)
     print(f"Unique symbols after filtering: {len(sym_sorted)}", flush=True)
     print(f"First symbols: {sym_sorted[:30]}", flush=True)
-    print(f"Output canonical root: {CANONICAL_ROOT}", flush=True)
+    print(f"Output canonical root: {canonical_root}", flush=True)
     print(f"Manifest FULL: {manifest_full}", flush=True)
     print(f"Manifest RTH: {manifest_rth}", flush=True)
     return 0

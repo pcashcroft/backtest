@@ -16,7 +16,7 @@ Technical summary:
 Inputs:
 - Uses paths under E:\\BacktestData (SSD).
 - Reads the Excel workbook at config\\run_config.xlsx (the “control plane”).
-- Calls: tools\\verify_run_config_xlsx.py and tools\\export_config_snapshot.py
+- Calls: tools\\verify\\verify_run_config_xlsx.py and tools\\admin\\export_config_snapshot.py
 
 Outputs:
 - Creates folders under E:\\BacktestData\\... (raw, canonical, derived, features_cache, runs, logs).
@@ -25,9 +25,9 @@ Outputs:
 
 How to run:
 - From repo root PowerShell:
-  pybt tools/bootstrap_foundation.py
+  pybt tools/setup/bootstrap_foundation.py
 - If you don’t have the pybt alias:
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\bootstrap_foundation.py
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\setup\\bootstrap_foundation.py
 
 What success looks like:
 - Prints “Foundation bootstrap complete.”
@@ -39,7 +39,7 @@ Common failures and fixes:
   pybt -m pip install duckdb
 - “E:\\ drive missing” -> check SSD is mounted as E: and retry.
 - “Workbook verification failed / workbook missing” ->
-  run: pybt tools/make_run_config_xlsx.py then pybt tools/verify_run_config_xlsx.py
+  run: pybt tools/admin/make_run_config_xlsx.py then pybt tools/verify/verify_run_config_xlsx.py
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ import duckdb
 
 def _repo_root() -> Path:
     """Return the repository root folder based on this file location."""
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def _ensure_dirs(paths: list[Path]) -> None:
@@ -182,8 +182,8 @@ def main() -> int:
     _init_duckdb(db_path)
 
     repo_root = _repo_root()
-    _run([sys.executable, str(repo_root / "tools" / "verify_run_config_xlsx.py")])
-    _run([sys.executable, str(repo_root / "tools" / "export_config_snapshot.py")])
+    _run([sys.executable, str(repo_root / "tools" / "verify" / "verify_run_config_xlsx.py")])
+    _run([sys.executable, str(repo_root / "tools" / "admin" / "export_config_snapshot.py")])
 
     latest_snapshot = repo_root / "config" / "exports" / "config_snapshot_latest.json"
 

@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 2026-02-24 (Session 2)
+Last updated: 2026-02-24 (Session 3)
 
 ## Completed
 
@@ -45,28 +45,38 @@ Last updated: 2026-02-24 (Session 2)
   - cvd_proxy_1m rows: 4,896,455 FULL + 1,618,721 RTH
   - DuckDB manifest: ES_FOOTPRINT_PROXY_1M_FULL/RTH, ES_CVD_PROXY_1M_FULL/RTH (2016-02-23 → 2026-02-23)
 
-### Tools
-- `bootstrap_foundation.py` - SSD setup + DuckDB init
-- `ingest_es_trades_databento.py` - ES trade-level data (incremental support)
-- `ingest_ohlcv_1s_databento.py` - ES 1s OHLCV bars
-- `ingest_daily_consolidated.py` - Consolidated daily series
-- `ingest_daily_macro_instruments.py` - Macro instrument daily data
-- `export_config_snapshot.py` - Excel → JSON export
+### Tools (21 scripts in 5 subdirectories)
+
+**`tools/ingest/`** — Bring raw data in
+- `ingest_trades_databento.py` - Trade-level Databento DBN → partitioned parquet (instrument-agnostic, `--instrument-id`)
+- `ingest_ohlcv_1s_databento.py` - 1s OHLCV Databento DBN → partitioned parquet (instrument-agnostic, `--instrument-id`)
+- `ingest_daily_consolidated.py` - Consolidated daily series → canonical parquet
+- `ingest_daily_macro_instruments.py` - Macro instrument daily data → canonical parquet
+
+**`tools/build/`** — Derive new data from canonical
+- `build_derived_bars_1m.py` - Build 1m OHLCV bars from 1s canonical (incremental, instrument-agnostic)
+- `build_derived_trade_metrics.py` - Build footprint_base_1m + cvd_1m from trades (incremental, dispatches on metric_type)
+- `build_derived_trade_metrics_proxy.py` - Build footprint_proxy_1m + cvd_proxy_1m from 1s OHLCV using BVC
+
+**`tools/admin/`** — Excel config management + migrations
 - `make_run_config_xlsx.py` - Create blank workbook from schema
+- `export_config_snapshot.py` - Excel → JSON snapshot export
+- `add_bars_1m_config.py` - Add BARS_1M to DATASETS + update INSTRUMENTS (`--instrument-id`)
+- `add_trade_metrics_config.py` - Add FOOTPRINT_1M + CVD_1M to DATASETS (`--instrument-id`)
+- `add_trade_metrics_proxy_config.py` - Add FOOTPRINT_PROXY_1M + CVD_PROXY_1M to DATASETS (`--instrument-id`)
+- `migrate_run_config_add_instruments_cols.py` - Schema migration (volume_col, units)
+- `migrate_run_config_add_metric_source_cols.py` - Migration: 5 metric-source columns + defaults
+- `update_instruments_from_macro_workbook.py` - Sync INSTRUMENTS from macro workbook
+
+**`tools/verify/`** — Checks, debugging, profiling
 - `verify_run_config_xlsx.py` - Validate workbook structure
 - `verify_duckdb_registry.py` - Check DuckDB tables
-- `check_instruction_headers.py` - Enforce documentation standard
+- `check_instruction_headers.py` - Enforce documentation standard (pre-commit hook)
 - `profile_databento_dbn.py` - Inspect DBN file stats
+
+**`tools/setup/`** — One-time bootstrap + utility
+- `bootstrap_foundation.py` - SSD setup + DuckDB init
 - `update_design_folder_layout.py` - Auto-generate FOLDER_LAYOUT.md
-- `update_instruments_from_macro_workbook.py` - Sync INSTRUMENTS from workbook
-- `migrate_run_config_add_instruments_cols.py` - Schema migration
-- `add_bars_1m_config.py` - Add any instrument's BARS_1M row to DATASETS + update INSTRUMENTS (CLI: `--instrument-id ES`)
-- `build_derived_bars_1m.py` - Build 1m OHLCV bars from 1s canonical (incremental, instrument-agnostic)
-- `add_trade_metrics_config.py` - Add any instrument's FOOTPRINT_1M + CVD_1M rows to DATASETS (CLI: `--instrument-id ES`)
-- `build_derived_trade_metrics.py` - Build footprint_base_1m and cvd_1m from trades (incremental, instrument-agnostic, dispatches on metric_type)
-- `migrate_run_config_add_metric_source_cols.py` - One-time migration: adds 5 metric-source columns to INSTRUMENTS sheet + sets defaults
-- `add_trade_metrics_proxy_config.py` - Add any instrument's FOOTPRINT_PROXY_1M + CVD_PROXY_1M rows to DATASETS + update INSTRUMENTS (CLI: `--instrument-id ES`)
-- `build_derived_trade_metrics_proxy.py` - Build footprint_proxy_1m and cvd_proxy_1m from 1s OHLCV using BVC (incremental, instrument-agnostic)
 
 ## In Progress
 
@@ -109,4 +119,14 @@ Last updated: 2026-02-24 (Session 2)
   - BVC method: buy_frac=(close-low)/(high-low), fallback 0.5 for doji bars
   - Footprint proxy: doji at single price 50/50; non-doji buy at high, sell at low
   - Schema-compatible with real tables (same column names) for interchangeable chart/backtest use
-- ES proxy build started: footprint_proxy_1m + cvd_proxy_1m, 3,113 FULL + 2,578 RTH dates
+- ES proxy build completed: footprint_proxy_1m + cvd_proxy_1m, 3,113 FULL + 2,578 RTH dates
+
+### Session 3 (2026-02-24) - Tools Reorganisation + Ingest Generalisation
+- Removed 2 obsolete PowerShell scripts (`push_to_github.ps1`, `end_thread_handover.ps1`) — Claude Code handles git
+- Generalised `ingest_es_trades_databento.py` → `ingest_trades_databento.py`: now instrument-agnostic via `--instrument-id` CLI; reads source glob from DATASETS config instead of hardcoded paths
+- Generalised `ingest_ohlcv_1s_databento.py`: now instrument-agnostic via `--instrument-id` CLI; derives DATASET_ID and CANONICAL_ROOT from instrument_id
+- Reorganised flat `tools/` (21 scripts) into 5 subdirectories: `ingest/`, `build/`, `admin/`, `verify/`, `setup/`
+- Updated 7 hardcoded subprocess path references across 6 files + pre-commit hook
+- Updated all 21 INSTRUCTION HEADER "How to run" paths and cross-references
+- Fixed `_repo_root()` / `parents[]` depth in 6 files (now `parents[2]` for subdirectory nesting)
+- All verification passed: `check_instruction_headers.py` OK, `export_config_snapshot.py` OK, both ingest `--help` OK

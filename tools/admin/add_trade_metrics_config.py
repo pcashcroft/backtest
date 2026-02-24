@@ -5,7 +5,7 @@ What this script does (plain English):
 - Adds two derived DATASETS rows for any instrument (e.g. ES, NQ) to run_config.xlsx:
     {ID}_FOOTPRINT_1M  (dataset_type=derived_trade_metrics, metric_type=footprint)
     {ID}_CVD_1M        (dataset_type=derived_trade_metrics, metric_type=cvd)
-- Re-exports the config snapshot so tools/build_derived_trade_metrics.py picks up the change.
+- Re-exports the config snapshot so tools/build/build_derived_trade_metrics.py picks up the change.
 - Does NOT modify the INSTRUMENTS sheet (trade-metric datasets are not price sources).
 
 Instrument-agnostic: works for ES, NQ, or any future instrument.
@@ -15,13 +15,13 @@ Where to run:
 
 How to run:
   # Add ES (uses default source DB_ES_TRADES):
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\add_trade_metrics_config.py --instrument-id ES
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\admin\\add_trade_metrics_config.py --instrument-id ES
 
   # Add NQ (uses default source DB_NQ_TRADES):
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\add_trade_metrics_config.py --instrument-id NQ
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\admin\\add_trade_metrics_config.py --instrument-id NQ
 
   # Add with explicit source dataset id:
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\add_trade_metrics_config.py --instrument-id ES --source-dataset-id DB_ES_TRADES
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\admin\\add_trade_metrics_config.py --instrument-id ES --source-dataset-id DB_ES_TRADES
 
 What success looks like:
 - Prints "Added {ID}_FOOTPRINT_1M to DATASETS" (or "already exists, skipping").
@@ -30,7 +30,7 @@ What success looks like:
 
 Common failures + fixes:
 - Permission error on xlsx: close Excel if the workbook is open, then retry.
-- "Missing sheet": run tools/make_run_config_xlsx.py first.
+- "Missing sheet": run tools/admin/make_run_config_xlsx.py first.
 """
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ def main() -> int:
 
     if not XLSX_PATH.exists():
         raise FileNotFoundError(
-            f"Workbook not found: {XLSX_PATH}. Run tools/make_run_config_xlsx.py first."
+            f"Workbook not found: {XLSX_PATH}. Run tools/admin/make_run_config_xlsx.py first."
         )
 
     wb = load_workbook(XLSX_PATH)
@@ -161,7 +161,7 @@ def main() -> int:
     print(f"Workbook saved: {XLSX_PATH}")
 
     subprocess.run(
-        [sys.executable, "tools/export_config_snapshot.py"],
+        [sys.executable, "tools/admin/export_config_snapshot.py"],
         check=True,
     )
     print("Config snapshot re-exported.")

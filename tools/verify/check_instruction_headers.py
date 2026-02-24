@@ -4,7 +4,7 @@ What this file does: Checks that files contain the required Instruction Header m
 Where it runs: Terminal [command line] on Windows.
 Inputs: Files in `src/`, `tools/`, `tests/`, and `notebooks/`.
 Outputs: Prints failures and exits non-zero if any are missing.
-How to run: `pybt tools/check_instruction_headers.py`
+How to run: `pybt tools/verify/check_instruction_headers.py`
 What success looks like: Prints `OK` and exits with code 0.
 Common failures + fixes: Add an Instruction Header to missing files.
 """
@@ -85,7 +85,7 @@ def _find_ipynb_issue(path: Path) -> str | None:
 
 
 def main() -> int:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     failures: list[str] = []
 
     for root in ROOTS:

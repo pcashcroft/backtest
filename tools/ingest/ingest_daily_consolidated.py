@@ -5,10 +5,10 @@ Where it runs: Terminal [command line].
 Inputs: `config/exports/config_snapshot_latest.json`, source XLSM path from that snapshot, DuckDB at
 `E:/BacktestData/duckdb/research.duckdb`.
 Outputs: Parquet dataset under `E:/BacktestData/canonical/daily_series` partitioned by `year`, plus registry updates in DuckDB.
-How to run: `pybt tools/ingest_daily_consolidated.py`
-Also: `C:/Users/pcash/anaconda3/envs/backtest/python.exe tools/ingest_daily_consolidated.py`
+How to run: `pybt tools/ingest/ingest_daily_consolidated.py`
+Also: `C:/Users/pcash/anaconda3/envs/backtest/python.exe tools/ingest/ingest_daily_consolidated.py`
 What success looks like: prints ingested row count, min/max date, output path, and the inserted DuckDB manifest row.
-Common failures + fixes: snapshot missing -> run `pybt tools/export_config_snapshot.py`; source file missing -> fix path in DATASETS;
+Common failures + fixes: snapshot missing -> run `pybt tools/admin/export_config_snapshot.py`; source file missing -> fix path in DATASETS;
 openpyxl missing -> `pybt -m pip install openpyxl`; duckdb missing -> `pybt -m pip install duckdb`.
 """
 

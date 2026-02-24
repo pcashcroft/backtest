@@ -50,13 +50,13 @@ Outputs:
 
 How to run:
   # Normal incremental run (skips already-built dates):
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build_derived_trade_metrics_proxy.py
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build\\build_derived_trade_metrics_proxy.py
 
   # Force-rebuild all dates:
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build_derived_trade_metrics_proxy.py --force-rebuild
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build\\build_derived_trade_metrics_proxy.py --force-rebuild
 
   # Only process one specific dataset:
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build_derived_trade_metrics_proxy.py --dataset-id ES_FOOTPRINT_PROXY_1M
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build\\build_derived_trade_metrics_proxy.py --dataset-id ES_FOOTPRINT_PROXY_1M
 
 What success looks like:
 - Prints per-session progress and "DONE" at the end.
@@ -66,7 +66,7 @@ What success looks like:
 
 Common failures + fixes:
 - "No derived_trade_metrics_proxy rows found":
-    run tools/add_trade_metrics_proxy_config.py first.
+    run tools/admin/add_trade_metrics_proxy_config.py first.
 - "Source canonical root not found":
     run ingest_ohlcv_1s_databento.py first.
 - DuckDB permission error: close any other process using research.duckdb.
@@ -101,7 +101,7 @@ def _load_snapshot(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(
             f"Config snapshot missing: {path}\n"
-            "Run tools/export_config_snapshot.py first."
+            "Run tools/admin/export_config_snapshot.py first."
         )
     try:
         import orjson
@@ -576,7 +576,7 @@ def main() -> int:
         print(
             "ERROR: No DATASETS rows with "
             "dataset_type='derived_trade_metrics_proxy' found.\n"
-            "Run tools/add_trade_metrics_proxy_config.py first.",
+            "Run tools/admin/add_trade_metrics_proxy_config.py first.",
             file=sys.stderr,
         )
         return 1

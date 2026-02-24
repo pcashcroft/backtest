@@ -1,15 +1,30 @@
 """
 INSTRUCTION HEADER
-What this file does: Canonicalizes Databento ES trades DBN files into partitioned parquet (FULL and RTH sessions).
-Where it runs: Terminal [command line].
-Inputs: `config/exports/config_snapshot_latest.json`, DBN files in `E:/BacktestData/raw/Emini_trade_data`.
-Outputs: Parquet dataset under `E:/BacktestData/canonical/es_trades`, plus DuckDB registry/manifest entries.
-How to run: `pybt tools/ingest_es_trades_databento.py`
-Also: `C:/Users/pcash/anaconda3/envs/backtest/python.exe tools/ingest_es_trades_databento.py`
-What success looks like: prints files processed, row counts for FULL/RTH, min/max ts_event, output path, and manifest rows.
-Common failures + fixes: databento missing -> install package; DBN files missing -> check raw folder and glob;
-DuckDB missing -> install duckdb; permission issues -> ensure canonical root is writable.
-Incremental mode: use `--incremental` to skip dates already ingested per session/spec hash.
+
+What this file does (plain English):
+- Canonicalizes Databento trade-level DBN files into partitioned parquet (FULL and RTH sessions).
+- Instrument-agnostic: works for ES, NQ, or any future instrument via --instrument-id CLI arg.
+- Reads the source DBN glob path from DATASETS.source_path_or_id in config snapshot.
+
+Where to run:
+- Run from repo root: C:\\Users\\pcash\\OneDrive\\Backtest
+
+How to run:
+  # Ingest ES trades:
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\ingest\\ingest_trades_databento.py --instrument-id ES
+
+  # Ingest NQ trades:
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\ingest\\ingest_trades_databento.py --instrument-id NQ
+
+  # Incremental mode (skip already-ingested dates):
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\ingest\\ingest_trades_databento.py --instrument-id ES --incremental
+
+What success looks like:
+- Prints files processed, row counts for FULL/RTH, min/max ts_event, output path, and manifest rows.
+
+Common failures + fixes:
+- databento missing -> install package; DBN files missing -> check DATASETS.source_path_or_id glob;
+  DuckDB missing -> install duckdb; permission issues -> ensure canonical root is writable.
 """
 
 from __future__ import annotations
@@ -29,11 +44,8 @@ import re
 
 
 SNAPSHOT_PATH = Path("config/exports/config_snapshot_latest.json")
-DATASET_ID = "DB_ES_TRADES"
-RAW_ROOT = Path("E:/BacktestData/raw/Emini_trade_data")
-RAW_GLOB = "glbx-mdp3-*.trades.dbn"
-CANONICAL_ROOT = Path("E:/BacktestData/canonical/es_trades")
-DUCKDB_PATH = Path("E:/BacktestData/duckdb/research.duckdb")
+DATA_ROOT = Path("E:/BacktestData")
+DUCKDB_PATH = DATA_ROOT / "duckdb" / "research.duckdb"
 TZ_NY = "America/New_York"
 
 REQUIRED_COLS = ["ts_event", "ts_recv", "symbol", "price", "size", "side", "sequence", "flags"]
@@ -204,6 +216,9 @@ def _upsert_registry(dataset_id: str, raw_glob: str, canonical_root: str, column
 
 
 def _insert_manifest(
+    instrument_id: str,
+    dataset_id: str,
+    canonical_root: Path,
     session: str,
     coverage_start: dt.datetime | None,
     coverage_end: dt.datetime | None,
@@ -213,7 +228,11 @@ def _insert_manifest(
         raise ValueError(f"No coverage for session {session}; no rows to record.")
 
     now = dt.datetime.now()
-    spec_hash = _spec_hash(DATASET_ID, columns, "09:30-16:00 America/New_York, weekdays only", session)
+    spec_hash = _spec_hash(dataset_id, columns, "09:30-16:00 America/New_York, weekdays only", session)
+
+    iid = instrument_id.lower()
+    derived_id = f"canonical_{iid}_trades_{session}"
+    table_name = f"{iid}_trades"
 
     con = duckdb.connect(str(DUCKDB_PATH))
     con.execute(
@@ -223,13 +242,13 @@ def _insert_manifest(
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            f"canonical_es_trades_{session}",
-            "es_trades",
+            derived_id,
+            table_name,
             spec_hash,
             session,
             coverage_start,
             coverage_end,
-            str(CANONICAL_ROOT),
+            str(canonical_root),
             now,
         ],
     )
@@ -240,14 +259,22 @@ def _insert_manifest(
         ORDER BY created_at DESC
         LIMIT 1
         """,
-        [f"canonical_es_trades_{session}"],
+        [derived_id],
     ).fetchone()
     con.close()
     return row
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ingest Databento ES trades DBN files.")
+    parser = argparse.ArgumentParser(
+        description="Ingest Databento trade-level DBN files for any instrument."
+    )
+    parser.add_argument(
+        "--instrument-id",
+        required=True,
+        metavar="ID",
+        help="Instrument ID matching the DATASETS sheet (e.g. ES, NQ).",
+    )
     parser.add_argument("--max-files", type=int, default=None, help="Process only the most recent N files.")
     parser.add_argument(
         "--only-session",
@@ -275,55 +302,75 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _partition_dates(session: str) -> set[str]:
+def _partition_dates(canonical_root: Path, session: str) -> set[str]:
     dates: set[str] = set()
-    for p in CANONICAL_ROOT.glob(f"session={session}/date=*"):
+    for p in canonical_root.glob(f"session={session}/date=*"):
         if p.is_dir():
             dates.add(p.name.split("=", 1)[1])
     if dates:
         return dates
-    for p in (CANONICAL_ROOT / session).glob("*"):
+    for p in (canonical_root / session).glob("*"):
         if p.is_dir():
             dates.add(p.name)
     return dates
 
 
-def _manifest_rows_for_session(con: duckdb.DuckDBPyConnection, session: str, spec_hash: str) -> list[tuple]:
+def _manifest_rows_for_session(con: duckdb.DuckDBPyConnection, instrument_id: str, session: str, spec_hash: str) -> list[tuple]:
+    derived_id = f"canonical_{instrument_id.lower()}_trades_{session}"
     return con.execute(
         """
         SELECT * FROM manifest_derived_tables
         WHERE derived_id=? AND spec_hash=?
         """,
-        [f"canonical_es_trades_{session}", spec_hash],
+        [derived_id, spec_hash],
     ).fetchall()
 
 
 def main() -> int:
     args = _parse_args()
+    instrument_id = args.instrument_id.strip().upper()
+    dataset_id = f"DB_{instrument_id}_TRADES"
+    canonical_root = DATA_ROOT / "canonical" / f"{instrument_id.lower()}_trades"
+
     snapshot = _load_snapshot(SNAPSHOT_PATH)
-    _ = _find_dataset_row(snapshot, DATASET_ID)
+    dataset_row = _find_dataset_row(snapshot, dataset_id)
 
-    if not RAW_ROOT.exists():
-        raise FileNotFoundError(f"Raw folder not found: {RAW_ROOT}")
+    source_glob = dataset_row.get("source_path_or_id")
+    if not source_glob:
+        raise ValueError(
+            f"Missing source_path_or_id for {dataset_id} in config snapshot."
+        )
 
-    files = _sort_files_by_date(list(RAW_ROOT.glob(RAW_GLOB)))
+    raw_path = Path(source_glob)
+    raw_root = raw_path.parent
+    raw_glob = raw_path.name
+
+    if not raw_root.exists():
+        raise FileNotFoundError(f"Raw folder not found: {raw_root}")
+
+    files = _sort_files_by_date(list(raw_root.glob(raw_glob)))
     if not files:
-        raise FileNotFoundError(f"No DBN files found for glob: {RAW_ROOT / RAW_GLOB}")
+        raise FileNotFoundError(f"No DBN files found for glob: {source_glob}")
+
+    print(f"Instrument: {instrument_id}")
+    print(f"Dataset: {dataset_id}")
+    print(f"Source glob: {source_glob}")
+    print(f"Canonical root: {canonical_root}")
 
     skipped_full: list[Path] = []
     skipped_rth: list[Path] = []
     selected_dates_full: set[str] = set()
     selected_dates_rth: set[str] = set()
     if args.incremental:
-        spec_full = _spec_hash(DATASET_ID, REQUIRED_COLS, "09:30-16:00 America/New_York, weekdays only", "FULL")
-        spec_rth = _spec_hash(DATASET_ID, REQUIRED_COLS, "09:30-16:00 America/New_York, weekdays only", "RTH")
+        spec_full = _spec_hash(dataset_id, REQUIRED_COLS, "09:30-16:00 America/New_York, weekdays only", "FULL")
+        spec_rth = _spec_hash(dataset_id, REQUIRED_COLS, "09:30-16:00 America/New_York, weekdays only", "RTH")
         con = duckdb.connect(str(DUCKDB_PATH))
-        rows_full = _manifest_rows_for_session(con, "FULL", spec_full) if args.only_session in ("FULL", "BOTH") else []
-        rows_rth = _manifest_rows_for_session(con, "RTH", spec_rth) if args.only_session in ("RTH", "BOTH") else []
+        rows_full = _manifest_rows_for_session(con, instrument_id, "FULL", spec_full) if args.only_session in ("FULL", "BOTH") else []
+        rows_rth = _manifest_rows_for_session(con, instrument_id, "RTH", spec_rth) if args.only_session in ("RTH", "BOTH") else []
         con.close()
 
-        dates_full = _partition_dates("FULL") if rows_full else set()
-        dates_rth = _partition_dates("RTH") if rows_rth else set()
+        dates_full = _partition_dates(canonical_root, "FULL") if rows_full else set()
+        dates_rth = _partition_dates(canonical_root, "RTH") if rows_rth else set()
 
         if rows_full and not dates_full:
             raise RuntimeError("Manifest shows FULL ingested but no FULL partition folders found.")
@@ -402,7 +449,7 @@ def main() -> int:
     for f in files:
         print(f"  {f}")
 
-    _ensure_writable_dir(CANONICAL_ROOT)
+    _ensure_writable_dir(canonical_root)
 
     total_full = 0
     total_rth = 0
@@ -426,12 +473,12 @@ def main() -> int:
             if args.incremental and selected_dates_full and file_date not in selected_dates_full:
                 full_rows = 0
             else:
-                full_rows = _write_partitioned(df, "FULL", CANONICAL_ROOT)
+                full_rows = _write_partitioned(df, "FULL", canonical_root)
         if args.only_session in ("RTH", "BOTH"):
             if args.incremental and selected_dates_rth and file_date not in selected_dates_rth:
                 rth_rows = 0
             else:
-                rth_rows = _write_partitioned(df, "RTH", CANONICAL_ROOT)
+                rth_rows = _write_partitioned(df, "RTH", canonical_root)
 
         if full_rows > 0:
             dmin = df["ts_event"].min().to_pydatetime()
@@ -448,26 +495,26 @@ def main() -> int:
             max_rth = rmax if max_rth is None else max(max_rth, rmax)
             total_rth += rth_rows
 
-    _upsert_registry(DATASET_ID, str(RAW_ROOT / RAW_GLOB), str(CANONICAL_ROOT), REQUIRED_COLS)
+    _upsert_registry(dataset_id, source_glob, str(canonical_root), REQUIRED_COLS)
 
     manifest_full = None
     manifest_rth = None
     if args.only_session in ("FULL", "BOTH"):
         if total_full == 0:
             raise ValueError("No FULL rows written; refusing to insert manifest.")
-        manifest_full = _insert_manifest("FULL", min_full, max_full, REQUIRED_COLS)
+        manifest_full = _insert_manifest(instrument_id, dataset_id, canonical_root, "FULL", min_full, max_full, REQUIRED_COLS)
     if args.only_session in ("RTH", "BOTH"):
         if total_rth == 0:
             print("No RTH rows written; skipping RTH manifest insert.")
         else:
-            manifest_rth = _insert_manifest("RTH", min_rth, max_rth, REQUIRED_COLS)
+            manifest_rth = _insert_manifest(instrument_id, dataset_id, canonical_root, "RTH", min_rth, max_rth, REQUIRED_COLS)
 
     print(f"Files processed: {len(files)}")
     print(f"Rows written FULL: {total_full}")
     print(f"Rows written RTH: {total_rth}")
     print(f"FULL min/max ts_event: {min_full} / {max_full}")
     print(f"RTH min/max ts_event: {min_rth} / {max_rth}")
-    print(f"Output canonical root: {CANONICAL_ROOT}")
+    print(f"Output canonical root: {canonical_root}")
     print(f"Manifest FULL: {manifest_full}")
     print(f"Manifest RTH: {manifest_rth}")
     return 0

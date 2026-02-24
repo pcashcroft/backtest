@@ -2,45 +2,54 @@
 INSTRUCTION HEADER
 
 What this script does (plain English):
-- Builds 1-minute OHLCV bars from the canonical 1-second OHLCV data on SSD.
-- Reads all DATASETS rows with dataset_type='derived_bars' from the config snapshot
-  and processes each one (instrument-agnostic: works for ES, NQ, or any future instrument).
-- For each instrument: aggregates 1s parquet → 1m bars using DuckDB, writes per-date parquet.
-- Supports incremental mode: skips dates that are already built.
+- Builds 1-minute footprint_base_1m and cvd_1m parquet files from canonical
+  trade-level data on SSD.
+- Reads all DATASETS rows with dataset_type='derived_trade_metrics' from the
+  config snapshot and processes each one (instrument-agnostic).
+- metric_type in the DATASETS notes field controls what is built:
+    metric_type: footprint  ->  footprint_base_1m  (buy/sell volume per price level per minute)
+    metric_type: cvd        ->  cvd_1m             (buy/sell volume + delta per minute)
+- Supports incremental mode: skips dates already built.
 - Updates the DuckDB manifest (manifest_derived_tables) with coverage after each session.
+- Spread symbols (containing '-') are excluded from both metrics.
 
 Where to run:
 - Run from repo root: C:\\Users\\pcash\\OneDrive\\Backtest
 
 Inputs:
 - config/exports/config_snapshot_latest.json
-- E:\\BacktestData\\canonical\\es_ohlcv_1s\\{FULL|RTH}\\{date}\\part-*.parquet
+- E:\\BacktestData\\canonical\\es_trades\\{FULL|RTH}\\{date}\\part-*.parquet
 
 Outputs:
-- E:\\BacktestData\\derived\\bars_1m\\ES\\{FULL|RTH}\\{date}\\part-0.parquet
-  Schema: bar_time (timestamp UTC), symbol (str), open, high, low, close (float64),
-          volume (int64), tick_count (int32)
-- DuckDB manifest_derived_tables updated with spec_hash and coverage.
+  footprint_base_1m:
+    E:\\BacktestData\\derived\\footprint_base_1m\\ES\\{FULL|RTH}\\{date}\\part-0.parquet
+    Schema: bar_time (timestamp UTC), symbol (str), price (float64),
+            buy_volume (int64), sell_volume (int64), trade_count (int32)
+
+  cvd_1m:
+    E:\\BacktestData\\derived\\cvd_1m\\ES\\{FULL|RTH}\\{date}\\part-0.parquet
+    Schema: bar_time (timestamp UTC), symbol (str),
+            buy_volume (int64), sell_volume (int64), delta (int64), trade_count (int32)
 
 How to run:
   # Normal incremental run (skips already-built dates):
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build_derived_bars_1m.py
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build\\build_derived_trade_metrics.py
 
-  # Force-rebuild all dates (re-processes everything):
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build_derived_bars_1m.py --force-rebuild
+  # Force-rebuild all dates:
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build\\build_derived_trade_metrics.py --force-rebuild
 
-  # Only process one specific dataset:
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build_derived_bars_1m.py --dataset-id ES_BARS_1M
+  # Only process one specific dataset (e.g. just footprint):
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\build\\build_derived_trade_metrics.py --dataset-id ES_FOOTPRINT_1M
 
 What success looks like:
 - Prints per-session progress and "DONE" at the end.
-- Files exist at: E:\\BacktestData\\derived\\bars_1m\\ES\\FULL\\2025-12-01\\part-0.parquet
-- DuckDB manifest has a row for ES_BARS_1M_FULL and ES_BARS_1M_RTH.
+- Files exist at: E:\\BacktestData\\derived\\footprint_base_1m\\ES\\FULL\\2026-02-20\\part-0.parquet
+- DuckDB manifest has rows for ES_FOOTPRINT_1M_FULL, ES_FOOTPRINT_1M_RTH,
+  ES_CVD_1M_FULL, ES_CVD_1M_RTH.
 
 Common failures + fixes:
-- "No derived_bars rows found": run tools/add_es_bars_1m_config.py first.
-- "Source canonical root not found": run ingest_ohlcv_1s_databento.py first.
-- "No source dates found for RTH": RTH data may be absent; FULL will still build.
+- "No derived_trade_metrics rows found": run tools/admin/add_trade_metrics_config.py first.
+- "Source canonical root not found": run ingest_es_trades_databento.py first.
 - DuckDB permission error: close any other process using research.duckdb.
 - pyarrow missing: pip install pyarrow in the backtest conda env.
 """
@@ -64,16 +73,23 @@ import pyarrow.parquet as pq
 SNAPSHOT_PATH = Path("config/exports/config_snapshot_latest.json")
 SESSIONS = ("FULL", "RTH")
 
+# side encoding (from ingest_es_trades_databento.py):
+#   1 = 'A' (ask-side aggressor) = buyer-initiated trade
+#   2 = 'B' (bid-side aggressor) = seller-initiated trade
+#   0 = 'N' (no aggressor / auction) — excluded
+SIDE_BUY  = 1
+SIDE_SELL = 2
+
 
 # ---------------------------------------------------------------------------
-# Config helpers
+# Config helpers  (shared pattern with build_derived_bars_1m.py)
 # ---------------------------------------------------------------------------
 
 def _load_snapshot(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(
             f"Config snapshot missing: {path}\n"
-            "Run tools/export_config_snapshot.py first."
+            "Run tools/admin/export_config_snapshot.py first."
         )
     try:
         import orjson
@@ -144,48 +160,95 @@ def _built_dates(root: Path, session: str) -> set[str]:
 
 
 # ---------------------------------------------------------------------------
-# DuckDB aggregation
+# DuckDB aggregations
 # ---------------------------------------------------------------------------
 
-def _aggregate_1m(parquet_files: list[Path], con: duckdb.DuckDBPyConnection) -> pa.Table:
+def _build_footprint(
+    parquet_files: list[Path],
+    con: duckdb.DuckDBPyConnection,
+) -> pa.Table:
     """
-    Aggregate 1s OHLCV parquet files to 1-minute bars.
+    Aggregate trade-level data to 1-minute footprint rows.
 
-    Groups by (minute_bucket, symbol) using:
-      open  = value of open  at the earliest ts_event in the minute
-      high  = max high
-      low   = min low
-      close = value of close at the latest  ts_event in the minute
-      volume     = sum of volume
-      tick_count = number of 1s bars in the minute (data quality indicator)
+    One row per (minute, symbol, price).  Spread symbols (containing '-')
+    are excluded.  Only aggressor-flagged trades (side 1 or 2) are included.
 
-    Returns a PyArrow Table sorted by (bar_time, symbol).
+    Columns: bar_time, symbol, price, buy_volume, sell_volume, trade_count
     """
-    file_list = "[" + ", ".join(f"'{str(p).replace(chr(92), '/')}'" for p in parquet_files) + "]"
+    file_list = (
+        "["
+        + ", ".join(f"'{str(p).replace(chr(92), '/')}'" for p in parquet_files)
+        + "]"
+    )
 
     sql = f"""
     SELECT
-        date_trunc('minute', ts_event)        AS bar_time,
+        date_trunc('minute', ts_event)                              AS bar_time,
         symbol,
-        arg_min(open,  ts_event)              AS open,
-        max(high)                             AS high,
-        min(low)                              AS low,
-        arg_max(close, ts_event)              AS close,
-        CAST(sum(volume)   AS BIGINT)         AS volume,
-        CAST(count(*)      AS INTEGER)        AS tick_count
+        price,
+        CAST(sum(size) FILTER (WHERE side = {SIDE_BUY})  AS BIGINT)  AS buy_volume,
+        CAST(sum(size) FILTER (WHERE side = {SIDE_SELL}) AS BIGINT)  AS sell_volume,
+        CAST(count(*)                                     AS INTEGER) AS trade_count
     FROM read_parquet({file_list})
+    WHERE side IN ({SIDE_BUY}, {SIDE_SELL})
+      AND symbol NOT LIKE '%-%'
+    GROUP BY bar_time, symbol, price
+    ORDER BY bar_time, symbol, price
+    """
+    table = con.execute(sql).fetch_arrow_table()
+    return _cast_bar_time_utc(table)
+
+
+def _build_cvd(
+    parquet_files: list[Path],
+    con: duckdb.DuckDBPyConnection,
+) -> pa.Table:
+    """
+    Aggregate trade-level data to 1-minute CVD rows.
+
+    One row per (minute, symbol).  Spread symbols excluded.
+    delta = buy_volume - sell_volume.
+    CVD (cumulative delta) is NOT stored here; the chart layer computes
+    cumsum(delta) over the session, which is trivial in pandas/DuckDB.
+
+    Columns: bar_time, symbol, buy_volume, sell_volume, delta, trade_count
+    """
+    file_list = (
+        "["
+        + ", ".join(f"'{str(p).replace(chr(92), '/')}'" for p in parquet_files)
+        + "]"
+    )
+
+    sql = f"""
+    SELECT
+        date_trunc('minute', ts_event)                               AS bar_time,
+        symbol,
+        CAST(sum(size) FILTER (WHERE side = {SIDE_BUY})  AS BIGINT)  AS buy_volume,
+        CAST(sum(size) FILTER (WHERE side = {SIDE_SELL}) AS BIGINT)  AS sell_volume,
+        CAST(
+            sum(size) FILTER (WHERE side = {SIDE_BUY})
+          - sum(size) FILTER (WHERE side = {SIDE_SELL})
+          AS BIGINT
+        )                                                             AS delta,
+        CAST(count(*)                                     AS INTEGER) AS trade_count
+    FROM read_parquet({file_list})
+    WHERE side IN ({SIDE_BUY}, {SIDE_SELL})
+      AND symbol NOT LIKE '%-%'
     GROUP BY bar_time, symbol
     ORDER BY bar_time, symbol
     """
     table = con.execute(sql).fetch_arrow_table()
+    return _cast_bar_time_utc(table)
 
-    # Normalise bar_time timezone to UTC (DuckDB may emit local tz on some systems).
+
+def _cast_bar_time_utc(table: pa.Table) -> pa.Table:
+    """Cast bar_time column to timestamp[us, tz=UTC], avoiding pytz."""
     import pyarrow.compute as pc
     utc_type = pa.timestamp("us", tz="UTC")
     bar_time_utc = pc.cast(table.column("bar_time"), utc_type)
-    table = table.set_column(table.schema.get_field_index("bar_time"), "bar_time", bar_time_utc)
-
-    return table
+    return table.set_column(
+        table.schema.get_field_index("bar_time"), "bar_time", bar_time_utc
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -195,13 +258,13 @@ def _aggregate_1m(parquet_files: list[Path], con: duckdb.DuckDBPyConnection) -> 
 def _upsert_manifest(
     reg_con: duckdb.DuckDBPyConnection,
     derived_id: str,
+    table_name: str,
     spec_hash: str,
     session: str,
     coverage_start: dt.datetime,
     coverage_end: dt.datetime,
     parquet_path: str,
 ) -> None:
-    """Replace manifest row for (derived_id, session) with updated coverage."""
     reg_con.execute(
         "DELETE FROM manifest_derived_tables WHERE derived_id = ? AND session = ?",
         [derived_id, session],
@@ -214,7 +277,7 @@ def _upsert_manifest(
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            derived_id, "bars_1m", spec_hash, session,
+            derived_id, table_name, spec_hash, session,
             coverage_start, coverage_end, parquet_path,
             dt.datetime.now(),
         ],
@@ -227,20 +290,18 @@ def _query_full_coverage(
     agg_con: duckdb.DuckDBPyConnection,
 ) -> tuple[dt.datetime | None, dt.datetime | None]:
     """
-    Query the full coverage (min/max bar_time) across all built dates for a session.
-    Uses a glob over all part-0.parquet files in the session dir.
+    Query min/max bar_time across all built dates for a session.
+    Casts to plain TIMESTAMP to avoid the pytz requirement.
     """
     glob = str(output_root / session / "*" / "part-0.parquet").replace("\\", "/")
     try:
-        # Cast to plain TIMESTAMP (strips tz) so DuckDB returns naive Python datetimes
-        # without requiring the 'pytz' module.
         row = agg_con.execute(
-            f"SELECT min(bar_time::TIMESTAMP), max(bar_time::TIMESTAMP) FROM read_parquet('{glob}')"
+            f"SELECT min(bar_time::TIMESTAMP), max(bar_time::TIMESTAMP) "
+            f"FROM read_parquet('{glob}')"
         ).fetchone()
         if row and row[0] is not None:
             ts_start = row[0] if isinstance(row[0], dt.datetime) else row[0].as_py()
             ts_end   = row[1] if isinstance(row[1], dt.datetime) else row[1].as_py()
-            # Strip any residual tzinfo just in case
             if hasattr(ts_start, "tzinfo") and ts_start.tzinfo is not None:
                 ts_start = ts_start.replace(tzinfo=None)
             if hasattr(ts_end, "tzinfo") and ts_end.tzinfo is not None:
@@ -272,13 +333,17 @@ def _progress_iter(items: list[str], desc: str):
 
 
 # ---------------------------------------------------------------------------
-# Core per-dataset processor
+# Spec hash
 # ---------------------------------------------------------------------------
 
-def _spec_hash(derived_id: str, source_dataset_id: str, instrument_id: str) -> str:
-    payload = f"{derived_id}|{source_dataset_id}|{instrument_id}|bars_1m|v1"
+def _spec_hash(derived_id: str, source_dataset_id: str, instrument_id: str, metric_type: str) -> str:
+    payload = f"{derived_id}|{source_dataset_id}|{instrument_id}|{metric_type}|1m|v1"
     return hashlib.sha256(payload.encode()).hexdigest()
 
+
+# ---------------------------------------------------------------------------
+# Core per-dataset processor
+# ---------------------------------------------------------------------------
 
 def _process_derived_dataset(
     snapshot: dict[str, Any],
@@ -288,30 +353,38 @@ def _process_derived_dataset(
     agg_con: duckdb.DuckDBPyConnection,
     reg_con: duckdb.DuckDBPyConnection,
 ) -> None:
-    derived_id      = dataset_row["dataset_id"]
-    source_id       = (dataset_row.get("source_path_or_id") or "").strip()
-    notes           = _parse_notes(dataset_row.get("notes"))
-    instrument_id   = notes.get("instrument_id", "").strip()
+    derived_id    = dataset_row["dataset_id"]
+    source_id     = (dataset_row.get("source_path_or_id") or "").strip()
+    table_name    = (dataset_row.get("canonical_table_name") or "").strip()
+    notes         = _parse_notes(dataset_row.get("notes"))
+    instrument_id = notes.get("instrument_id", "").strip()
+    metric_type   = notes.get("metric_type", "").strip().lower()
 
     if not instrument_id:
         raise ValueError(f"{derived_id}: missing 'instrument_id' in DATASETS notes.")
     if not source_id:
-        raise ValueError(f"{derived_id}: missing source_path_or_id (should be source dataset_id).")
+        raise ValueError(f"{derived_id}: missing source_path_or_id.")
+    if metric_type not in ("footprint", "cvd"):
+        raise ValueError(
+            f"{derived_id}: unsupported metric_type={metric_type!r}. "
+            "Expected 'footprint' or 'cvd'."
+        )
 
-    source_row   = _find_dataset_by_id(snapshot, source_id)
+    source_row    = _find_dataset_by_id(snapshot, source_id)
     canonical_dir = Path(paths_row["CANONICAL_DIR"])
     data_root     = Path(paths_row["DATA_ROOT"])
 
     source_root  = canonical_dir / source_row["canonical_table_name"]
-    output_root  = data_root / "derived" / "bars_1m" / instrument_id
+    output_root  = data_root / "derived" / table_name / instrument_id
     output_root.mkdir(parents=True, exist_ok=True)
 
-    spec_h = _spec_hash(derived_id, source_id, instrument_id)
+    spec_h = _spec_hash(derived_id, source_id, instrument_id, metric_type)
 
     print(f"\n{'='*60}", flush=True)
-    print(f"  Dataset : {derived_id}  (instrument={instrument_id})", flush=True)
-    print(f"  Source  : {source_root}", flush=True)
-    print(f"  Output  : {output_root}", flush=True)
+    print(f"  Dataset    : {derived_id}  (instrument={instrument_id})", flush=True)
+    print(f"  Metric type: {metric_type}", flush=True)
+    print(f"  Source     : {source_root}", flush=True)
+    print(f"  Output     : {output_root}", flush=True)
     print(f"{'='*60}", flush=True)
 
     for session in SESSIONS:
@@ -331,7 +404,11 @@ def _process_derived_dataset(
         )
 
         if not to_build:
-            print(f"  [{session}] All dates already built (use --force-rebuild to reprocess).", flush=True)
+            print(
+                f"  [{session}] All dates already built "
+                f"(use --force-rebuild to reprocess).",
+                flush=True,
+            )
         else:
             rows_written = 0
 
@@ -343,10 +420,16 @@ def _process_derived_dataset(
                     print(f"    WARNING: no parquet files in {source_date_dir}", flush=True)
                     continue
 
-                table = _aggregate_1m(parquet_files, agg_con)
+                if metric_type == "footprint":
+                    table = _build_footprint(parquet_files, agg_con)
+                else:
+                    table = _build_cvd(parquet_files, agg_con)
 
                 if table.num_rows == 0:
-                    print(f"    WARNING: 0 rows after aggregation for {date_str} — skipping.", flush=True)
+                    print(
+                        f"    WARNING: 0 rows after aggregation for {date_str} — skipping.",
+                        flush=True,
+                    )
                     continue
 
                 out_dir = output_root / session / date_str
@@ -356,12 +439,14 @@ def _process_derived_dataset(
 
             print(f"  [{session}] Rows written (new): {rows_written}", flush=True)
 
-        # Update manifest with full coverage across ALL built dates (new + existing).
+        # Update manifest with full coverage across ALL built dates.
         ts_start, ts_end = _query_full_coverage(output_root, session, agg_con)
         if ts_start is not None:
+            manifest_id = f"{derived_id}_{session}"
             _upsert_manifest(
                 reg_con,
-                derived_id=f"{derived_id}_{session}",
+                derived_id=manifest_id,
+                table_name=table_name,
                 spec_hash=spec_h,
                 session=session,
                 coverage_start=ts_start,
@@ -379,7 +464,7 @@ def _process_derived_dataset(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Build 1-minute OHLCV derived bars from canonical 1s data."
+        description="Build 1-minute footprint_base_1m and cvd_1m from canonical trade data."
     )
     parser.add_argument(
         "--force-rebuild",
@@ -390,18 +475,18 @@ def main() -> int:
         "--dataset-id",
         default=None,
         metavar="ID",
-        help="Only process this specific dataset_id (default: all derived_bars rows).",
+        help="Only process this specific dataset_id (default: all derived_trade_metrics rows).",
     )
     args = parser.parse_args()
 
     snapshot  = _load_snapshot(SNAPSHOT_PATH)
     paths_row = _active_paths(snapshot)
 
-    derived_rows = _find_dataset_rows(snapshot, "derived_bars")
+    derived_rows = _find_dataset_rows(snapshot, "derived_trade_metrics")
     if not derived_rows:
         print(
-            "ERROR: No DATASETS rows with dataset_type='derived_bars' found.\n"
-            "Run tools/add_es_bars_1m_config.py first.",
+            "ERROR: No DATASETS rows with dataset_type='derived_trade_metrics' found.\n"
+            "Run tools/admin/add_trade_metrics_config.py first.",
             file=sys.stderr,
         )
         return 1
@@ -409,15 +494,20 @@ def main() -> int:
     if args.dataset_id:
         derived_rows = [r for r in derived_rows if r.get("dataset_id") == args.dataset_id]
         if not derived_rows:
-            print(f"ERROR: No derived_bars row found for dataset_id={args.dataset_id!r}.", file=sys.stderr)
+            print(
+                f"ERROR: No derived_trade_metrics row found for "
+                f"dataset_id={args.dataset_id!r}.",
+                file=sys.stderr,
+            )
             return 1
 
-    print(f"Derived bar datasets to process: {[r['dataset_id'] for r in derived_rows]}", flush=True)
+    print(
+        f"Trade-metric datasets to process: {[r['dataset_id'] for r in derived_rows]}",
+        flush=True,
+    )
 
-    # In-memory DuckDB for aggregation queries (no file I/O contention).
     agg_con = duckdb.connect(":memory:")
 
-    # Registry DuckDB for manifest updates.
     duckdb_path = Path(paths_row["DUCKDB_FILE"])
     reg_con = duckdb.connect(str(duckdb_path))
 

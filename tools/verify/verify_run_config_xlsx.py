@@ -3,12 +3,12 @@ INSTRUCTION HEADER
 Purpose: Verify the Excel control-plane workbook matches the expected schema.
 Inputs: Reads `config/run_config.xlsx` and schema in `src/backtest/config/schema.py`.
 Outputs: None (prints results, exits non-zero on failure).
-How to run: `pybt tools/verify_run_config_xlsx.py`
-Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\verify_run_config_xlsx.py`
+How to run: `pybt tools/verify/verify_run_config_xlsx.py`
+Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\verify\\verify_run_config_xlsx.py`
 Success looks like: `Workbook verification passed.`
 Common failures and fixes:
 - Module not found (openpyxl): run `pybt -m pip install openpyxl`.
-- Header mismatch: regenerate the workbook with `pybt tools/make_run_config_xlsx.py`.
+- Header mismatch: regenerate the workbook with `pybt tools/admin/make_run_config_xlsx.py`.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from openpyxl import load_workbook
 
 def _repo_root() -> Path:
     """Return the repository root folder based on this file location."""
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def _load_headers() -> dict[str, list[str]]:

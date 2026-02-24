@@ -3,8 +3,8 @@ INSTRUCTION HEADER
 Purpose: Create the Excel control-plane workbook with required sheets and headers.
 Inputs: Reads schema from `src/backtest/config/schema.py`.
 Outputs: Writes `config/run_config.xlsx`.
-How to run: `pybt tools/make_run_config_xlsx.py`
-Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\make_run_config_xlsx.py`
+How to run: `pybt tools/admin/make_run_config_xlsx.py`
+Also: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\admin\\make_run_config_xlsx.py`
 Success looks like: console prints `Created workbook: ...config\\run_config.xlsx`.
 Common failures and fixes:
 - Module not found (openpyxl): run `pybt -m pip install openpyxl`.
@@ -22,7 +22,7 @@ from openpyxl.utils import get_column_letter
 
 def _repo_root() -> Path:
     """Return the repository root folder based on this file location."""
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def _load_headers() -> dict[str, list[str]]:

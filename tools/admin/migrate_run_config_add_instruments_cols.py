@@ -3,11 +3,11 @@ INSTRUCTION HEADER
 Purpose: Add volume_col and units columns to the INSTRUMENTS sheet if missing.
 Inputs: Reads `config/run_config.xlsx`.
 Outputs: Updates `config/run_config.xlsx` in place.
-How to run: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\migrate_run_config_add_instruments_cols.py`
+How to run: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\admin\\migrate_run_config_add_instruments_cols.py`
 Success looks like: prints before/after headers and a success message.
 Common failures and fixes:
 - Permission error: close Excel if the workbook is open and retry.
-- Missing workbook: run `tools/make_run_config_xlsx.py`.
+- Missing workbook: run `tools/admin/make_run_config_xlsx.py`.
 """
 
 from __future__ import annotations

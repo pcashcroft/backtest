@@ -3,7 +3,7 @@ INSTRUCTION HEADER
 Purpose: Populate INSTRUMENTS rows for macro instruments and add ES placeholder from Macro_Instruments.xlsx.
 Inputs: `config/run_config.xlsx`, `E:/BacktestData/raw/Macro_Instruments.xlsx`.
 Outputs: Updates `config/run_config.xlsx` in place.
-How to run: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\update_instruments_from_macro_workbook.py`
+How to run: `C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\admin\\update_instruments_from_macro_workbook.py`
 Success looks like: prints counts of updated/appended instrument rows.
 Common failures and fixes:
 - Permission error: close Excel if the workbook is open and retry.

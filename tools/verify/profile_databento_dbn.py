@@ -4,7 +4,7 @@ Purpose: Profile Databento DBN files to inspect columns, symbols, and timestamps
 Inputs: DBN files under a root folder (via --root and --glob).
 Outputs: Console report only (no files written).
 How to run:
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\profile_databento_dbn.py --root "E:\\BacktestData\\raw\\Emini_1s_ohlcv"
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\verify\\profile_databento_dbn.py --root "E:\\BacktestData\\raw\\Emini_1s_ohlcv"
 Success looks like: Prints per-file stats and overall totals.
 Common failures and fixes:
 - Module not found (databento): install databento in the backtest env.

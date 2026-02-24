@@ -5,9 +5,9 @@ Where it runs: Terminal (repo root).
 Inputs: `config/exports/config_snapshot_latest.json`, source XLSX path from that snapshot, DuckDB at
 `E:/BacktestData/duckdb/research.duckdb`.
 Outputs: Parquet dataset under `E:/BacktestData/canonical/daily_series` partitioned by `year`, plus registry updates in DuckDB.
-How to run: `C:/Users/pcash/anaconda3/envs/backtest/python.exe tools/ingest_daily_macro_instruments.py`
+How to run: `C:/Users/pcash/anaconda3/envs/backtest/python.exe tools/ingest/ingest_daily_macro_instruments.py`
 What success looks like: Prints sheet list, row counts, min/max date, output path, series checks, and inserted manifest row.
-Common failures + fixes: snapshot missing -> run `tools/export_config_snapshot.py`; source file missing -> fix path in DATASETS;
+Common failures + fixes: snapshot missing -> run `tools/admin/export_config_snapshot.py`; source file missing -> fix path in DATASETS;
 openpyxl missing -> install packages; duckdb missing -> install duckdb.
 """
 

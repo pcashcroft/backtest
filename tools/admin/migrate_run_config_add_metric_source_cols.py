@@ -16,7 +16,7 @@ Where to run:
 - Run from repo root: C:\\Users\\pcash\\OneDrive\\Backtest
 
 How to run:
-  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\migrate_run_config_add_metric_source_cols.py
+  C:\\Users\\pcash\\anaconda3\\envs\\backtest\\python.exe tools\\admin\\migrate_run_config_add_metric_source_cols.py
 
 What success looks like:
 - Prints the columns added (or "already present").
@@ -25,7 +25,7 @@ What success looks like:
 
 Common failures + fixes:
 - Permission error on xlsx: close Excel if the workbook is open, then retry.
-- "Missing sheet": run tools/make_run_config_xlsx.py first.
+- "Missing sheet": run tools/admin/make_run_config_xlsx.py first.
 """
 
 from __future__ import annotations
@@ -154,7 +154,7 @@ def _set_instrument_defaults(ws, dataset_ids: set[str]) -> list[str]:
 def main() -> int:
     if not XLSX_PATH.exists():
         raise FileNotFoundError(
-            f"Workbook not found: {XLSX_PATH}. Run tools/make_run_config_xlsx.py first."
+            f"Workbook not found: {XLSX_PATH}. Run tools/admin/make_run_config_xlsx.py first."
         )
 
     wb = load_workbook(XLSX_PATH)
@@ -188,7 +188,7 @@ def main() -> int:
     print(f"Workbook saved: {XLSX_PATH}")
 
     subprocess.run(
-        [sys.executable, "tools/export_config_snapshot.py"],
+        [sys.executable, "tools/admin/export_config_snapshot.py"],
         check=True,
     )
     print("Config snapshot re-exported.")
